@@ -1,0 +1,57 @@
+[package]
+name = "keyhog-sources"
+description = "Pluggable input sources: filesystem, git history, stdin, s3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["git"]
+git = ["gix"]
+github = ["dep:reqwest", "dep:tempfile", "dep:serde", "dep:serde_json", "dep:base64"]
+s3 = [
+    "dep:reqwest",
+    "dep:serde",
+    "dep:quick-xml",
+    "dep:urlencoding",
+    "dep:hmac",
+    "dep:sha2",
+    "dep:hex",
+    "dep:chrono",
+]
+docker = ["dep:tar", "dep:tempfile"]
+binary = ["dep:goblin", "dep:tempfile", "dep:glob", "dep:wait-timeout"]  # ELF/PE/Mach-O + Ghidra decompiler
+
+[dependencies]
+keyhog-core = { workspace = true }
+walkdir = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+gix = { workspace = true, optional = true }
+memmap2 = "0.9"
+regex = { workspace = true }
+# Binary analysis dependencies
+goblin = { version = "0.10", optional = true }
+glob = { version = "0.3", optional = true }
+wait-timeout = { version = "0.2", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# GitHub feature dependencies
+reqwest = { workspace = true, features = ["blocking"], optional = true }
+base64 = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+tempfile = { version = "3", optional = true }
+quick-xml = { version = "0.37", features = ["serialize"], optional = true }
+tar = { version = "0.4", optional = true }
+urlencoding = { version = "2", optional = true }
+unicode-normalization = { workspace = true }
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
+chrono = { version = "0.4", default-features = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3"

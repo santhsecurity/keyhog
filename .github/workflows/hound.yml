@@ -1,0 +1,149 @@
+name: KeyHog Secret Scanner
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Required for SARIF upload to GitHub Code Scanning
+  security-events: write
+
+jobs:
+  scan:
+    name: Scan for Secrets
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history needed for git-diff scanning
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+
+      - name: Build KeyHog
+        run: cargo build --release -p keyhog-cli
+
+      - name: Run KeyHog Secret Scanner
+        id: keyhog-scan
+        run: |
+          # Determine base ref for comparison
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="${{ github.base_ref }}"
+            echo "Scanning changed files against base branch: $BASE_REF"
+          else
+            # For push events, scan against the previous commit
+            BASE_REF="HEAD~1"
+            echo "Scanning changed files against: $BASE_REF"
+          fi
+
+          # Run scan with SARIF output
+          # Use git-diff to scan only changed files
+          ./target/release/keyhog scan \
+            --git-diff "$BASE_REF" \
+            --detectors detectors \
+            --min-confidence 0.7 \
+            --format sarif \
+            --output keyhog-results.sarif \
+            2>&1 | tee keyhog-output.txt || true
+
+          # Also run text output for GitHub annotations
+          ./target/release/keyhog scan \
+            --git-diff "$BASE_REF" \
+            --detectors detectors \
+            --min-confidence 0.7 \
+            --format text \
+            2>&1 | tee keyhog-text.txt || true
+
+          # Count findings
+          LIVE_COUNT=$(grep -c "\[LIVE\]" keyhog-text.txt 2>/dev/null || echo "0")
+          HIGH_CONF_COUNT=$(grep -c "conf:" keyhog-text.txt 2>/dev/null || echo "0")
+          
+          echo "live_count=$LIVE_COUNT" >> $GITHUB_OUTPUT
+          echo "high_conf_count=$HIGH_CONF_COUNT" >> $GITHUB_OUTPUT
+          
+          echo "Found $LIVE_COUNT live secret(s)"
+          echo "Found $HIGH_CONF_COUNT high-confidence finding(s)"
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: keyhog-results.sarif
+          category: keyhog-secret-scanner
+
+      - name: Post PR Comment
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('keyhog-text.txt', 'utf8');
+            
+            const body = `## 🔒 KeyHog Secret Scanner Results
+            
+            **⚠️ Potential secrets detected in this pull request.**
+            
+            <details>
+            <summary>Click to view findings</summary>
+            
+            \`\`\`
+            ${output}
+            \`\`\`
+            
+            </details>
+            
+            Please review the findings above. If these are false positives, consider adding them to \`.keyhogignore\`.
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Fail on Live Secrets
+        if: steps.keyhog-scan.outputs.live_count > 0
+        run: |
+          echo "::error::Live secrets detected! Please remove them before merging."
+          echo ""
+          grep "\[LIVE\]" keyhog-text.txt | head -20
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## KeyHog Secret Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          LIVE_COUNT="${{ steps.keyhog-scan.outputs.live_count }}"
+          HIGH_COUNT="${{ steps.keyhog-scan.outputs.high_conf_count }}"
+          
+          if [ "$LIVE_COUNT" -gt 0 ]; then
+            echo "❌ **$LIVE_COUNT live secret(s) detected**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please remove these secrets before merging." >> $GITHUB_STEP_SUMMARY
+          elif [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "⚠️ **$HIGH_COUNT high-confidence finding(s)**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the [Code Scanning results](https://github.com/${{ github.repository }}/security/code-scanning?query=tool%3Akeyhog-secret-scanner)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **No secrets detected**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View detailed results in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)." >> $GITHUB_STEP_SUMMARY

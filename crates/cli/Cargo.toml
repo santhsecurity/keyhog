@@ -1,0 +1,46 @@
+[package]
+name = "keyhog-cli"
+description = "CLI binary for the secret scanner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "keyhog"
+path = "src/main.rs"
+
+[features]
+default = ["git", "keyhog-scanner/default"]
+fast = []  # Overrides scanner defaults to nothing
+full = [
+    "keyhog-scanner/ml",
+    "keyhog-scanner/entropy",
+    "keyhog-scanner/decode",
+    "keyhog-scanner/multiline",
+    "verify",
+]
+git = ["keyhog-sources/git"]
+github = ["keyhog-sources/github"]
+s3 = ["keyhog-sources/s3"]
+docker = ["keyhog-sources/docker"]
+binary = ["keyhog-sources/binary"]
+verify = ["keyhog-verifier/live"]
+gpu = ["keyhog-scanner/gpu"]
+simd = ["keyhog-scanner/simd"]  # Vectorscan/Hyperscan SIMD regex (3-5x throughput)
+
+[dependencies]
+keyhog-core = { workspace = true }
+keyhog-scanner = { workspace = true, default-features = false }
+keyhog-verifier = { workspace = true, optional = true }
+keyhog-sources = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+rayon = { workspace = true }
+toml = "0.8"
+serde = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

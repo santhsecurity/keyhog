@@ -1,0 +1,26 @@
+# Docs: https://www.mongodb.com/docs/manual/reference/connection-string/
+# Format: mongodb://user:pass@host.domain or mongodb+srv://user:pass@host.domain
+# Prefix: mongodb
+
+[detector]
+id = "mongodb-connection-string"
+name = "MongoDB Connection String"
+service = "mongodb"
+severity = "critical"
+keywords = ["mongodb", "mongo"]
+
+[[detector.patterns]]
+regex = 'mongodb(?:\+srv)?://[^:]+:[^@]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9._-]+'
+description = "MongoDB connection string with credentials (requires domain host)"
+
+[detector.verify]
+method = "GET"
+url = "https://api.mongodb.com/v1/me"
+
+[detector.verify.auth]
+type = "header"
+name = "Authorization"
+template = "Bearer {{match}}"
+
+[detector.verify.success]
+status = 200

@@ -1,0 +1,27 @@
+# Docs: https://en.wikipedia.org/wiki/PKCS_8
+# Format: PEM-encoded private key block (-----BEGIN * PRIVATE KEY-----)
+# Verify: no verification endpoint (private keys are not API-callable)
+# Prefix: -----BEGIN
+
+[detector]
+id = "generic-private-key"
+name = "Private Key (PEM)"
+service = "crypto"
+severity = "critical"
+keywords = ["BEGIN", "PRIVATE KEY", "BEGIN RSA", "BEGIN EC", "BEGIN DSA", "BEGIN OPENSSH"]
+
+[[detector.patterns]]
+regex = '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+description = "PEM-encoded private key header (RSA, EC, DSA, OPENSSH)"
+
+[detector.verify]
+method = "GET"
+url = "https://en.wikipedia.org/v1/me"
+
+[detector.verify.auth]
+type = "header"
+name = "Authorization"
+template = "Bearer {{match}}"
+
+[detector.verify.success]
+status = 200

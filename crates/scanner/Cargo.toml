@@ -1,0 +1,38 @@
+[package]
+name = "keyhog-scanner"
+description = "Aho-Corasick + regex compiled scanner for credential detection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["ml", "entropy", "decode", "multiline"]
+ml = []
+entropy = []
+decode = []
+multiline = []
+gpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]  # GPU-accelerated batch MoE inference via wgpu compute shaders
+simd = ["dep:hyperscan"]  # Vectorscan/Hyperscan SIMD regex compilation (builds HS database)
+simd_scan = ["simd"]      # Enable SIMD scan path (experimental — AC+fallback is faster for <2K patterns)
+
+[dependencies]
+keyhog-core = { workspace = true }
+wgpu = { version = "24", optional = true }
+pollster = { version = "0.4", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+aho-corasick = { workspace = true }
+regex = { workspace = true }
+base64 = { workspace = true }
+unicode-normalization = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sha2 = "0.10"
+memchr = "2.8.0"
+hyperscan = { version = "0.3", optional = true }
+
+# Optional: Vectorscan SIMD backend
+
+[dev-dependencies]
+criterion = { workspace = true }
+keyhog-verifier = { workspace = true }
+tokio = { workspace = true }

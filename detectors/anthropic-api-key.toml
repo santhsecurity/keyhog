@@ -1,0 +1,27 @@
+# Docs: https://docs.anthropic.com/en/api/getting-started
+# Format: sk-ant-api followed by version number and 80-100 alphanumeric/underscore/hyphen chars
+# Verify: GET request to Anthropic models endpoint with x-api-key header
+# Prefix: sk-ant-api
+
+[detector]
+id = "anthropic-api-key"
+name = "Anthropic API Key"
+service = "anthropic"
+severity = "critical"
+keywords = ["sk-ant-", "anthropic"]
+
+[[detector.patterns]]
+regex = 'sk-ant-api[0-9]{2}-[a-zA-Z0-9_-]{80,100}'
+description = "Anthropic API key (sk-ant-)"
+
+[detector.verify]
+method = "GET"
+url = "https://api.anthropic.com/v1/models"
+
+[detector.verify.auth]
+type = "header"
+name = "x-api-key"
+template = "{{match}}"
+
+[detector.verify.success]
+status = 200

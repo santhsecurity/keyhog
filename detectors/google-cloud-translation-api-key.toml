@@ -1,0 +1,35 @@
+# Docs: https://cloud.google.com/translate/docs/setup
+# Format: 39 character string starting with 'AIza' (e.g., AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI)
+# Verify: POST /language/translate/v2 with key query param
+# Prefix: AIza
+
+[detector]
+id = "google-cloud-translation-api-key"
+name = "Google Cloud Translation API Key"
+service = "google-cloud-translation"
+severity = "critical"
+keywords = ["AIza", "GOOGLE_TRANSLATE_API_KEY", "GOOGLE_API_KEY", "translation.googleapis.com"]
+
+[[detector.patterns]]
+regex = "AIza[0-9A-Za-z_-]{35}"
+description = "Google Cloud Translation API key (AIza prefix)"
+
+[[detector.patterns]]
+regex = "(?:GOOGLE_TRANSLATE_API_KEY|GOOGLE_CLOUD_TRANSLATION_API_KEY|GOOGLE_API_KEY)[=:\\s\"'']+(AIza[0-9A-Za-z_-]{35})"
+description = "Google Cloud Translation API key with context anchor"
+group = 1
+
+[[detector.patterns]]
+regex = "translation\\.googleapis\\.com.*key[=:](AIza[0-9A-Za-z_-]{35})"
+description = "Google Cloud Translation API key in URL"
+group = 1
+
+[detector.verify]
+method = "POST"
+url = "https://translation.googleapis.com/language/translate/v2?key={{match}}"
+
+[detector.verify.auth]
+type = "none"
+
+[detector.verify.success]
+status = 400

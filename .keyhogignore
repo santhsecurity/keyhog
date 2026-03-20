@@ -1,0 +1,15 @@
+# Hound scanner ignore file
+# Ignore detector definition files (contain credential patterns, not secrets)
+path:detectors/**
+# Ignore test corpus (contains planted test secrets)
+path:tests/corpus/**
+# Ignore build artifacts
+path:target/**
+# Ignore agent logs
+path:scripts/logs/**
+# Ignore benchmark stress files
+path:benches/**
+path:tests/**
+path:scripts/**
+path:*.lock
+path:*.md

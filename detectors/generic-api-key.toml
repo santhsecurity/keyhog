@@ -1,0 +1,48 @@
+# Generic high-entropy credential detector
+# Catches secrets assigned to variables with secret-indicating names.
+# This is the broadest detector — activates on any variable name suggesting a secret.
+# Verify: no verification endpoint (generic detector, service unknown)
+
+[detector]
+id = "generic-api-key"
+name = "Generic API Key / Secret"
+service = "generic"
+severity = "medium"
+keywords = ["password", "secret", "token", "api_key", "apikey", "auth", "credential", "key", "SECRET", "TOKEN", "KEY", "PASSWORD", "hmac", "HMAC", "signing", "webhook"]
+
+[[detector.patterns]]
+# SECRET_NAME = high-entropy-value (24+ chars with letters and digits)
+regex = "(?i)(?:password|passwd|secret|token|hmac|signing|api[_-]?key|auth[_-]?token|access[_-]?key|access[_-]?secret|private[_-]?key|client[_-]?secret|signing[_-]?key|encryption[_-]?key|deploy[_-]?key|jwt[_-]?secret|api[_-]?secret|webhook[_-]?secret|internal[_-]?token|service[_-]?key|master[_-]?key|app[_-]?secret)[\"']?\\s*[:=]\\s*[\"']?([a-zA-Z0-9/+=_-]{24,80})[\"']?"
+description = "High-entropy string assigned to a secret-named variable"
+group = 1
+
+[[detector.patterns]]
+# Broader: ANY_WORD_secret/token/key/hmac = value
+# Uses [a-z0-9]*_ prefix to avoid greedy eating of the keyword itself
+regex = "(?i)(?:[a-z0-9]+_)?(?:secret|token|key|hmac|credential|auth)(?:_[a-z0-9]+)?\\s*[:=]\\s*[\"']?([a-zA-Z0-9/+=_-]{24,80})[\"']?"
+description = "Variable name containing secret/token/key with high-entropy value"
+group = 1
+
+[[detector.patterns]]
+# Bearer token: AUTH=Bearer <token> or AUTHORIZATION=Bearer <token>
+regex = "(?i)(?:[a-z0-9]+_)?(?:auth|token|bearer|authorization|credential)(?:_[a-z0-9]+)?\\s*[:=]\\s*[\"']?(?:Bearer\\s+)?([a-zA-Z0-9/+=_-]{24,80})[\"']?"
+description = "Bearer token assigned to auth-named variable"
+group = 1
+
+[[detector.patterns]]
+# Compound names: secret_key, secret_string, api_secret, etc.
+regex = "(?i)(?:secret_key|secret_string|api_secret|client_secret|access_secret|signing_secret|webhook_secret|master_key|service_key|encryption_key|private_key)\\s*[:=]\\s*[\"']?([^\"'\\s]{16,80})[\"']?"
+description = "Compound secret-named variable with value"
+group = 1
+
+[detector.verify]
+method = "GET"
+url = "https://api.generic.com/v1/me"
+
+[detector.verify.auth]
+type = "header"
+name = "X-Api-Key"
+template = "{{match}}"
+
+[detector.verify.success]
+status = 200

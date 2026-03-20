@@ -1,0 +1,32 @@
+# Docs: https://supabase.com/docs/guides/api/api-keys
+# Format: eyJ... JWT with 'role: anon' claim
+# Verify: no public verification endpoint (requires Supabase instance)
+# Prefix: eyJ
+
+[detector]
+id = "supabase-anon-key"
+name = "Supabase Anon Key"
+service = "supabase"
+severity = "medium"
+keywords = ["eyJ", "supabase", "anon", "anon key"]
+
+[[detector.patterns]]
+regex = "eyJ[a-zA-Z0-9_-]*\\.eyJ[a-zA-Z0-9_-]*\\.eyJ[a-zA-Z0-9_-]*"
+description = "Supabase anon key (JWT with role:anon claim) - check decoded payload for 'anon'"
+
+[[detector.patterns]]
+regex = "(?:SUPABASE_ANON_KEY|anon key)[=:\\s\"'']+(eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+)"
+description = "Supabase anon key with context anchor"
+group = 1
+
+[detector.verify]
+method = "GET"
+url = "https://supabase.com/v1/me"
+
+[detector.verify.auth]
+type = "header"
+name = "Authorization"
+template = "Bearer {{match}}"
+
+[detector.verify.success]
+status = 200

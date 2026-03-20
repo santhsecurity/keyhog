@@ -1,0 +1,75 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/scanner",
+    "crates/verifier",
+    "crates/sources",
+    "crates/cli",
+]
+default-members = ["crates/cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+keyhog-core = { path = "crates/core" }
+keyhog-scanner = { path = "crates/scanner", default-features = false }
+keyhog-verifier = { path = "crates/verifier" }
+keyhog-sources = { path = "crates/sources" }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Pattern matching
+aho-corasick = "1"
+regex = "1"
+regex-syntax = "0.8"
+
+# HTTP
+reqwest = { version = "0.12", features = ["rustls-tls", "json", "stream"], default-features = false }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# File system
+walkdir = "2"
+base64 = "0.22"
+unicode-normalization = "0.1"
+
+# Git
+gix = { version = "0.70", default-features = false, features = ["max-performance-safe"] }
+
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Parallelism
+rayon = "1"
+memchr = "2"
+
+# ─── Build Profiles ───────────────────────────────────────
+# cargo build --release                          → default (ML + entropy + decode + multiline)
+# cargo build --release -F fast                  → regex only, ~2MB, 200+ MB/s
+# cargo build --release -F gpu                   → wgpu compute shader batch MoE inference
+# cargo build --release -F binary                → Ghidra decompiler + printable string extraction
+# cargo build --release -F full                  → all scanner features + live verification
+# cargo build --release --no-default-features    → bare minimum (Aho-Corasick + regex only)
+#
+# Features are independently toggleable. Combine freely:
+#   cargo build --release -F gpu,binary,full     → everything
+#   cargo build --release -F binary              → add Ghidra to default build

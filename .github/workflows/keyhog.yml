@@ -1,0 +1,265 @@
+name: KeyHog Secret Scanner
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Required for SARIF upload to GitHub Code Scanning
+  security-events: write
+
+env:
+  # KeyHog configuration
+  KEYHOG_VERSION: "0.1.0"
+  KEYHOG_MIN_CONFIDENCE: "0.5"
+  KEYHOG_DETECTORS_DIR: "detectors"
+
+jobs:
+  scan:
+    name: Scan for Secrets
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history needed for git-diff scanning
+          fetch-depth: 0
+
+      - name: Cache KeyHog Binary
+        id: cache-keyhog
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/keyhog
+          key: keyhog-${{ env.KEYHOG_VERSION }}-${{ runner.os }}
+
+      - name: Install Rust toolchain
+        if: steps.cache-keyhog.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build KeyHog from source
+        if: steps.cache-keyhog.outputs.cache-hit != 'true'
+        run: |
+          echo "Building KeyHog scanner from source..."
+          cargo build --release -p keyhog-cli
+          sudo cp target/release/keyhog /usr/local/bin/keyhog
+          sudo chmod +x /usr/local/bin/keyhog
+          echo "KeyHog version: $(keyhog --version 2>/dev/null || echo 'unknown')"
+
+      - name: Verify KeyHog installation
+        run: |
+          if [[ ! -x /usr/local/bin/keyhog ]]; then
+            echo "::error::KeyHog binary not found"
+            exit 1
+          fi
+          echo "✓ KeyHog scanner installed"
+
+      - name: Determine scan target
+        id: scan-target
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For PRs, scan changed files against base branch
+            BASE_REF="origin/${{ github.base_ref }}"
+            HEAD_REF="HEAD"
+            echo "mode=diff" >> $GITHUB_OUTPUT
+            echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+            echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
+            echo "Scanning changed files: $BASE_REF...$HEAD_REF"
+          else
+            # For push events, scan the entire repository
+            echo "mode=full" >> $GITHUB_OUTPUT
+            echo "Scanning full repository"
+          fi
+
+      - name: Run KeyHog Secret Scanner
+        id: keyhog-scan
+        run: |
+          set +e
+          
+          # Create output files
+          SARIF_OUTPUT="keyhog-results.sarif"
+          JSONL_OUTPUT="keyhog-results.jsonl"
+          TEXT_OUTPUT="keyhog-output.txt"
+          
+          if [[ "${{ steps.scan-target.outputs.mode }}" == "diff" ]]; then
+            # Scan only changed files
+            echo "Scanning files changed between ${{ steps.scan-target.outputs.base_ref }} and ${{ steps.scan-target.outputs.head_ref }}"
+            
+            # Get list of changed files
+            CHANGED_FILES=$(git diff --name-only --diff-filter=ACM ${{ steps.scan-target.outputs.base_ref }}...${{ steps.scan-target.outputs.head_ref }} 2>/dev/null || echo "")
+            
+            if [[ -z "$CHANGED_FILES" ]]; then
+              echo "No changed files to scan"
+              echo "finding_count=0" >> $GITHUB_OUTPUT
+              echo "high_confidence_count=0" >> $GITHUB_OUTPUT
+              
+              # Create empty SARIF
+              echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1.0/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"keyhog","version":"0.1.0","informationUri":"https://github.com/keyhog/keyhog","rules":[]}},"results":[]}]}' > "$SARIF_OUTPUT"
+              exit 0
+            fi
+            
+            echo "Changed files:"
+            echo "$CHANGED_FILES" | head -20
+            [[ $(echo "$CHANGED_FILES" | wc -l) -gt 20 ]] && echo "... ($(echo "$CHANGED_FILES" | wc -l) total files)"
+            echo ""
+            
+            # Export changed files to temp directory
+            TEMP_DIR=$(mktemp -d)
+            echo "$CHANGED_FILES" | while read -r file; do
+              [[ -z "$file" ]] && continue
+              [[ -f "$file" ]] || continue
+              mkdir -p "$TEMP_DIR/$(dirname "$file")"
+              git show "${{ steps.scan-target.outputs.head_ref }}:$file" > "$TEMP_DIR/$file" 2>/dev/null || true
+            done
+            
+            # Run scan on temp directory
+            SCAN_PATH="$TEMP_DIR"
+          else
+            # Scan full repository
+            SCAN_PATH="."
+          fi
+          
+          # Run scan with SARIF output
+          echo "Running KeyHog scan..."
+          keyhog scan \
+            --path "$SCAN_PATH" \
+            --detectors "$KEYHOG_DETECTORS_DIR" \
+            --min-confidence "$KEYHOG_MIN_CONFIDENCE" \
+            --format sarif \
+            --output "$SARIF_OUTPUT" \
+            2>&1 | tee "$TEXT_OUTPUT"
+          SCAN_EXIT=$?
+          
+          # Also run JSONL for parsing
+          keyhog scan \
+            --path "$SCAN_PATH" \
+            --detectors "$KEYHOG_DETECTORS_DIR" \
+            --min-confidence "$KEYHOG_MIN_CONFIDENCE" \
+            --format jsonl \
+            --output "$JSONL_OUTPUT" \
+            2>/dev/null || true
+          
+          # Count findings
+          FINDING_COUNT=$(grep -c '^{' "$JSONL_OUTPUT" 2>/dev/null || echo "0")
+          
+          # Count high-confidence findings (>= 0.8)
+          HIGH_CONF_COUNT=$(grep -E '"confidence":0\.[8-9]' "$JSONL_OUTPUT" 2>/dev/null | wc -l || echo "0")
+          
+          echo ""
+          echo "Scan complete:"
+          echo "  - Total findings: $FINDING_COUNT"
+          echo "  - High confidence: $HIGH_CONF_COUNT"
+          
+          echo "finding_count=$FINDING_COUNT" >> $GITHUB_OUTPUT
+          echo "high_confidence_count=$HIGH_CONF_COUNT" >> $GITHUB_OUTPUT
+          
+          # Clean up temp directory
+          [[ -n "${TEMP_DIR:-}" ]] && rm -rf "$TEMP_DIR"
+          
+          exit 0
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: keyhog-results.sarif
+          category: keyhog-secret-scanner
+          checkout_path: ${{ github.workspace }}
+
+      - name: Check for high-confidence secrets
+        id: check-secrets
+        run: |
+          FINDING_COUNT="${{ steps.keyhog-scan.outputs.finding_count }}"
+          HIGH_CONF_COUNT="${{ steps.keyhog-scan.outputs.high_confidence_count }}"
+          
+          if [[ "$HIGH_CONF_COUNT" -gt 0 ]]; then
+            echo "::error::$HIGH_CONF_COUNT high-confidence secret(s) detected!"
+            echo ""
+            echo "High-confidence findings:"
+            grep -E '"confidence":0\.[8-9]' keyhog-results.jsonl 2>/dev/null | while read -r line; do
+              file=$(echo "$line" | grep -o '"path":"[^"]*"' | cut -d'"' -f4 | xargs -0 basename 2>/dev/null || echo "unknown")
+              line_num=$(echo "$line" | grep -o '"line":[0-9]*' | cut -d':' -f2)
+              detector=$(echo "$line" | grep -o '"detector_name":"[^"]*"' | cut -d'"' -f4)
+              echo "  - $file:$line_num - $detector"
+            done
+            echo ""
+            echo "Please review and remove these secrets before merging."
+            exit 1
+          fi
+          
+          if [[ "$FINDING_COUNT" -gt 0 ]]; then
+            echo "::warning::$FINDING_COUNT potential secret(s) detected. Review the Code Scanning results."
+          fi
+          
+          echo "✓ No high-confidence secrets detected"
+
+      - name: Post PR Comment
+        if: github.event_name == 'pull_request' && steps.keyhog-scan.outputs.finding_count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const findingCount = parseInt('${{ steps.keyhog-scan.outputs.finding_count }}', 10);
+            const highConfCount = parseInt('${{ steps.keyhog-scan.outputs.high_confidence_count }}', 10);
+            
+            let statusEmoji = findingCount > 0 ? '⚠️' : '✅';
+            let statusText = findingCount > 0 ? 'Potential secrets detected' : 'No secrets detected';
+            
+            if (highConfCount > 0) {
+              statusEmoji = '❌';
+              statusText = '**High-confidence secrets detected** - Action required!';
+            }
+            
+            const body = `## ${statusEmoji} KeyHog Secret Scan Results
+            
+            ${statusText}
+            
+            | Metric | Count |
+            |--------|-------|
+            | Total Findings | ${findingCount} |
+            | High Confidence | ${highConfCount} |
+            
+            ${highConfCount > 0 ? '> **Please remove high-confidence secrets before merging.**' : ''}
+            
+            View detailed results in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning?query=tool%3Akeyhog-secret-scanner+pr%3A${{ github.event.number }}).
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## KeyHog Secret Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          FINDING_COUNT="${{ steps.keyhog-scan.outputs.finding_count || 0 }}"
+          HIGH_COUNT="${{ steps.keyhog-scan.outputs.high_confidence_count || 0 }}"
+          
+          if [[ "$HIGH_COUNT" -gt 0 ]]; then
+            echo "❌ **$HIGH_COUNT high-confidence secret(s) detected**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please remove these secrets before merging." >> $GITHUB_STEP_SUMMARY
+          elif [[ "$FINDING_COUNT" -gt 0 ]]; then
+            echo "⚠️ **$FINDING_COUNT potential finding(s)**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Review the [Code Scanning results](https://github.com/${{ github.repository }}/security/code-scanning?query=tool%3Akeyhog-secret-scanner)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **No secrets detected**" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Configuration | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Min Confidence | $KEYHOG_MIN_CONFIDENCE |" >> $GITHUB_STEP_SUMMARY
+          echo "| Detectors | $KEYHOG_DETECTORS_DIR |" >> $GITHUB_STEP_SUMMARY

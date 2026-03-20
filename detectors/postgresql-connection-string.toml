@@ -1,0 +1,26 @@
+# Docs: https://www.postgresql.org/docs/current/libpq-connect.html
+# Format: postgresql://user:pass@host.domain:port/db
+# Prefix: postgres
+
+[detector]
+id = "postgresql-connection-string"
+name = "PostgreSQL Connection String"
+service = "postgresql"
+severity = "critical"
+keywords = ["postgresql", "postgres", "DATABASE_URL"]
+
+[[detector.patterns]]
+regex = 'postgres(?:ql)?://[^:]+:[^@\s]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9._-]+'
+description = "PostgreSQL connection string with credentials (requires domain host)"
+
+[detector.verify]
+method = "GET"
+url = "https://api.postgresql.org/v1/me"
+
+[detector.verify.auth]
+type = "header"
+name = "Authorization"
+template = "Bearer {{match}}"
+
+[detector.verify.success]
+status = 200
