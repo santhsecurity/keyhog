@@ -1,18 +1,32 @@
 target/
 scripts/logs/
-ml/models/
-ml/training_data.jsonl
 *.pyc
 __pycache__/
 *.log
-tests/recall/
-tests/corpus/
-tests/benchmark_repo/
+
+# ── Test data (contains secret-like patterns for testing) ──
+tests/
 benches/
+crates/scanner/tests/
+crates/scanner/src/adversarial_tests/
+crates/verifier/tests/
+
+# ── ML training data (contains secret examples) ──
+ml/
+
+# ── Internal audit docs ──
+audits/
+
+# ── Benchmark results (downloadable from releases) ──
 BENCHMARKS.md
 VALIDATION.md
+benchmarks/
+
+# ── Non-Rust project dirs (separate repos) ──
 deno/
+go/
 laravel/
+linux/
 ruff/
 tailwind/
 react/

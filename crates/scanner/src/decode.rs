@@ -959,7 +959,7 @@ mod tests {
     #[test]
     fn decode_mime_encoded_word_q_secret() {
         let decoded = mime_encoded_word_decode(
-            "=?utf-8?Q?xoxb=2D1234567890=2D1234567890=2DAbCdEfGhIjKlMnOpQrStUvWx?=",
+            "=?utf-8?Q?xoxb=2DEXAMPLE1234=2DEXAMPLE5678=2DExAmPlEtOkEnVaLuEhErE?=",
         )
         .unwrap();
         assert_eq!(

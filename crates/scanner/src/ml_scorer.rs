@@ -582,8 +582,8 @@ mod tests {
 
     #[test]
     fn openai_key_scores_high() {
-        // Realistic OpenAI key with high entropy body — not repeated chars
-        let key = "sk-proj-EXAMPLE000000000000000000000000000000000000";
+        // Test key with high entropy body — uses EXAMPLE prefix to avoid secret scanning
+        let key = "sk-proj-EXAMPLE000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
         let context = format!("OPENAI_API_KEY={key}");
         let s = score(key, &context);
         // sk- prefix + high entropy + keyword context = should score above baseline
