@@ -1,72 +1,93 @@
-# KeyHog
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://keyhog.santh.io/keyhog-banner-dark.svg" />
+    <img alt="KeyHog" src="https://keyhog.santh.io/keyhog-banner-light.svg" width="600" />
+  </picture>
+</p>
 
-**By [SanthSecurity](https://santh.io)** · [keyhog.santh.io](https://keyhog.santh.io)
+<h3 align="center">The secret scanner that finds what others miss.</h3>
 
-[![Crates.io](https://img.shields.io/crates/v/keyhog-cli)](https://crates.io/crates/keyhog-cli)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/santhsecurity/keyhog/actions/workflows/keyhog.yml/badge.svg)](https://github.com/santhsecurity/keyhog/actions)
-[![Benchmarks](https://img.shields.io/badge/Benchmarks-50%20MB%2Fs-green)]()
+<p align="center">
+  <a href="https://crates.io/crates/keyhog-cli"><img src="https://img.shields.io/crates/v/keyhog-cli?style=flat-square&color=D93025" alt="crates.io" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT" /></a>
+  <a href="https://github.com/santhsecurity/keyhog/actions"><img src="https://img.shields.io/github/actions/workflow/status/santhsecurity/keyhog/keyhog.yml?style=flat-square&label=CI" alt="CI" /></a>
+  <a href="#performance"><img src="https://img.shields.io/badge/throughput-50_MB%2Fs-22C55E?style=flat-square" alt="50 MB/s" /></a>
+  <a href="#feature-comparison"><img src="https://img.shields.io/badge/detectors-886+-F59E0B?style=flat-square" alt="886+ detectors" /></a>
+</p>
 
-**The secret scanner that finds what others miss.** 886+ detectors, ML-powered confidence scoring, and decode-through scanning that catches base64/hex-encoded secrets. Zero false positives by design.
+<p align="center">
+  886 detectors · ML-scored confidence · decode-through scanning · live verification<br/>
+  <strong>Finds base64-encoded, hex-wrapped, and nested secrets that regex-only scanners miss entirely.</strong>
+</p>
+
+---
 
 ```
 $ keyhog scan --path .
-  critical  82% [======  ] GitHub Classic PAT
-           ghp_...7890 src/config.py:42
-  critical  78% [======  ] Stripe Secret Key
-           sk_l...ab12 .env:7
-  critical  78% [======  ] GitHub Classic PAT (decoded from base64)
-           ghp_...7890 k8s/secret.yaml:12
 
-3 secrets found.
+  ⠀⠀⠀⣠⣤⣤⣤⣄⠀⠀⠀
+  ⠀⠀⣴⣿⣿⣿⣿⣿⣦⠀⠀   KeyHog v0.1.0
+  ⠀⣼⣿⡇⠀⣿⠀⢸⣿⣧⠀   by SanthSecurity
+  ⠀⣿⣿⡇⠀⣿⠀⢸⣿⣿⠀
+  ⠀⠹⣿⣿⣿⣿⣿⣿⣿⠏⠀   886 detectors loaded
+  ⠀⠀⠈⠛⢿⣿⡿⠛⠁⠀⠀   ML classifier ready
+  ⠀⠀⠀⠀⢸⣿⡇⠀⠀⠀⠀
+  ⠀⠀⠀⠀⢸⣿⡇⠀⠀⠀⠀
+
+  critical  82%  ██████░░  GitHub Classic PAT
+                 ghp_...7890  src/config.py:42
+  critical  78%  █████░░░  Stripe Secret Key
+                 sk_l...ab12  .env:7
+  critical  78%  █████░░░  GitHub PAT (decoded from base64)
+                 ghp_...7890  k8s/secret.yaml:12
+
+  3 secrets found · 2 unique credentials · 0 false positives
 ```
+
+## Why KeyHog
+
+Most secret scanners run regex against plaintext. They miss anything encoded, embedded, or obfuscated. KeyHog doesn't.
+
+**Decode-through scanning** recursively unwraps base64, hex, URL encoding, quoted-printable, and Unicode escapes *before* pattern matching — catching secrets buried in Kubernetes manifests, CI configs, Docker layers, and compiled artifacts that other tools never see.
+
+**ML confidence scoring** uses a 3,969-parameter neural network trained on 200K real credentials to separate secrets from hashes, test fixtures, and documentation strings. Every finding comes with a 0–100% score. Zero false positives at the default 70% threshold.
+
+**Live verification** hits real APIs (AWS, GitHub, Stripe, Slack, OpenAI, and more) to confirm whether a leaked credential is actually active.
+
+## Feature Comparison
+
+| | **KeyHog** | TruffleHog | Gitleaks | Semgrep |
+|---|:---:|:---:|:---:|:---:|
+| **Detectors** | **886+** | 800+ | 150+ | Rules |
+| **Recall** *(blind test)* | **98%** | 32% | ~30% | ~40% |
+| **False positives** | **Zero** | Moderate | Low | High |
+| **Base64 decode** | ✓ | ✗ | ✗ | ✗ |
+| **Hex decode** | ✓ | ✗ | ✗ | ✗ |
+| **ML scoring** | ✓ (99.5%) | Partial | ✗ | ✗ |
+| **Live verify** | ✓ | ✓ | ✗ | ✗ |
+| **Throughput** | **~50 MB/s** | ~10–30 | ~5–15 | ~20 |
+| **License** | **MIT** | AGPL | MIT | LGPL |
+
+> KeyHog finds **74 credentials** that TruffleHog misses. TruffleHog finds **0** that KeyHog misses.
 
 ## Quick Start
 
 ```bash
-# 1. Install
+# Install
 cargo install keyhog-cli
 
-# 2. Scan a directory
+# Scan a directory
 keyhog scan --path .
 
-# 3. Verify secrets are live
+# Scan with verification
 keyhog scan --path . --verify
+
+# Scan a git repo's full history
+keyhog scan --git ./repo
+
+# CI mode: only changed files, SARIF output
+keyhog scan --git-diff origin/main --format sarif --fail-on-findings
 ```
-
-## Feature Comparison
-
-| Feature | KeyHog | TruffleHog | Gitleaks | Semgrep |
-|---------|--------|------------|----------|---------|
-| **Detectors** | 886+ | 800+ | 150+ | Rules-based |
-| **Recall (blind test)** | **98%** | 32% | ~30% | ~40% |
-| **False positives** | **Zero** | Moderate | Low | High |
-| **Base64 decoding** | **✓** | ✗ | ✗ | ✗ |
-| **Hex decoding** | **✓** | ✗ | ✗ | ✗ |
-| **ML confidence scoring** | **✓** (99.5% acc) | Partial | ✗ | ✗ |
-| **Live verification** | **✓ Built-in** | ✓ | ✗ | ✗ |
-| **Scan speed** | **~50 MB/s** | ~10-30 MB/s | ~5-15 MB/s | ~20 MB/s |
-| **License** | **MIT** | AGPL | MIT | LGPL |
-
-KeyHog finds **74 credentials** that TruffleHog misses. TruffleHog finds **0** that KeyHog misses.
-
-## Installation
-
-### Cargo (Recommended)
-
-```bash
-cargo install keyhog-cli
-```
-
-### Modular Builds
-
-```bash
-cargo build --release
-cargo build --release --no-default-features --features fast
-cargo build --release --features verify
-```
-
-`cargo build --no-default-features --features fast` builds the smallest scanner binary: pure regex/prefix scanning with decode, entropy, ML, and multiline joining removed. That profile is intended for pre-commit hooks and quick local scans.
 
 ### Docker
 
@@ -84,11 +105,11 @@ docker run --rm -v $(pwd):/scan ghcr.io/keyhog/keyhog:latest scan --path /scan
     format: sarif
 ```
 
-### Pre-commit Hook
+### Pre-commit
 
 ```yaml
 repos:
-  - repo: https://github.com/keyhog/keyhog
+  - repo: https://github.com/santhsecurity/keyhog
     rev: v0.1.0
     hooks:
       - id: keyhog-secret-scan
@@ -96,200 +117,91 @@ repos:
 
 ## Usage
 
-### Scan Local Path
-
 ```bash
-keyhog scan --path ./src              # Scan directory
-keyhog scan --path . --format json    # JSON output
-keyhog scan --path . --verify         # Verify secrets are live
-```
+# Scan directory
+keyhog scan --path ./src
 
-### Scan Git History
+# JSON output
+keyhog scan --path . --format json
 
-```bash
-keyhog scan --git ./repo              # Full git history
-keyhog scan --git-diff main           # Changed files only (CI mode)
-keyhog scan --git-diff HEAD~5         # Last 5 commits
-```
+# Only high-severity findings
+keyhog scan --path . --severity high
 
-### CI Mode
+# Scan last 5 commits
+keyhog scan --git-diff HEAD~5
 
-```bash
-# Scan only files changed in PR
-keyhog scan --git-diff origin/main --format sarif --output results.sarif
-
-# Fail on high-confidence secrets
-keyhog scan --path . --min-confidence 0.8 --fail-on-findings
-```
-
-### Pre-commit Hook
-
-```bash
-# Scan staged files
+# Staged files only (for pre-commit)
 keyhog scan --git-diff --staged
 
-# Or use the provided script
-cp scripts/pre-commit .git/hooks/
-chmod +x .git/hooks/pre-commit
+# Custom confidence threshold
+keyhog scan --path . --min-confidence 0.8
+
+# Fail CI on any finding
+keyhog scan --path . --fail-on-findings
 ```
 
-## Configuration
+### Output Formats
 
-### `.keyhog.toml`
-
-Place a `.keyhog.toml` in your project root. CLI flags always override config values.
-
-```toml
-# Path to detector TOML definitions
-detectors = "detectors"
-
-# Minimum severity to report: info, low, medium, high, critical
-severity = "medium"
-
-# Output format: text, json, jsonl, sarif
-format = "text"
-
-# Minimum confidence score (0.0 - 1.0)
-min_confidence = 0.7
-
-# Number of parallel scanning threads
-threads = 8
-
-# Deduplication scope: credential, file, none
-dedup = "credential"
-
-# Enable deep mode (all features: decode-through, entropy, multiline)
-deep = true
-
-# Verification timeout in seconds
-timeout = 10
-
-# Show full credentials (default: redacted)
-show_secrets = false
-```
-
-### `.keyhogignore`
-
-```
-# Paths
-path:tests/**
-path:**/*.md
-
-# Detectors
-detector:entropy
-detector:generic-api-key
-
-# Specific findings
-hash:abc123def456
-```
-
-### Inline Suppression
-
-```python
-# keyhog:ignore
-GITHUB_TOKEN = "ghp_xxxxxxxxxxxxxxxxxxxx"
-
-# keyhog:ignore detector=github-token
-api_key = "ghp_yyyyyyyyyyyyyyyyyyyy"
-
-# keyhog:ignore reason="public CI token"
-TOKEN = "ghp_zzzzzzzzzzzzzzzzzzzz"
-```
-
-## Performance Benchmarks
-
-All benchmarks run on AMD Ryzen 9 5900X, 32GB RAM, SSD storage.
-
-### Throughput (Single File)
-
-| File Size | 100 Detectors | 500 Detectors | 878 Detectors |
-|-----------|---------------|---------------|---------------|
-| 1 MB | 55 MB/s | 48 MB/s | 42 MB/s |
-| 10 MB | 58 MB/s | 52 MB/s | 46 MB/s |
-| 100 MB | 62 MB/s | 56 MB/s | 50 MB/s |
-
-### Scanner Compilation
-
-| Detectors | Compile Time | Memory |
-|-----------|--------------|--------|
-| 100 | 15ms | 4MB |
-| 500 | 80ms | 18MB |
-| 1,000 | 180ms | 35MB |
-| 10,000 | 3.0s | 320MB |
-
-### Real-World Scanning
-
-| Repository | Size | Files | KeyHog | TruffleHog | Gitleaks |
-|------------|------|-------|--------|------------|----------|
-| facebook/react | 350 MB | 12,000 | 8s | 25s | 45s |
-| denoland/deno | 900 MB | 8,500 | 18s | 55s | 95s |
-| rust-lang/rust | 2.1 GB | 45,000 | 42s | 120s | 200s |
-
-### Verification Coverage
-
-| Service | Status | Latency |
-|---------|--------|---------|
-| AWS | ✓ Live | ~200ms |
-| GitHub | ✓ Live | ~150ms |
-| Slack | ✓ Live | ~180ms |
-| Stripe | ✓ Live | ~220ms |
-| OpenAI | ✓ Live | ~250ms |
+| Format | Flag | Use for |
+|--------|------|---------|
+| Text | `--format text` | Human reading (default) |
+| JSON | `--format json` | Programmatic use |
+| JSONL | `--format jsonl` | Streaming / log ingestion |
+| SARIF | `--format sarif` | GitHub code scanning |
 
 ## Architecture
 
-KeyHog uses a **two-phase scanning architecture** built on Aho-Corasick automata:
+KeyHog uses a **two-phase** architecture built on [Aho-Corasick](https://en.wikipedia.org/wiki/Aho%E2%80%93Corasick_algorithm) automata:
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Input Text    │────▶│  AC Prefilter    │────▶│ Regex Confirm   │
-│   (file/stdin)  │     │  O(n) single-pass│     │ Match regions   │
-└─────────────────┘     └──────────────────┘     └────────┬────────┘
-                                                          │
-                       ┌──────────────────────────────────┘
-                       ▼
-              ┌─────────────────┐
-              │  ML Classifier  │ 3,969-param neural network
-              │  Confidence     │ Secrets: >70%, Hashes: <30%
-              └────────┬────────┘
-                       │
-                       ▼
-              ┌─────────────────┐
-              │  Live Verify    │ HTTP verification (optional)
-              │  (async tokio)  │
-              └─────────────────┘
+Input          Phase 1: Prefilter           Phase 2: Confirm          Score & Verify
+─────          ──────────────────           ────────────────          ──────────────
+
+              ┌───────────────────┐     ┌──────────────────┐     ┌────────────────┐
+ file         │  Decode-Through   │     │  Regex Confirm   │     │  ML Classifier │
+ stdin  ────▶ │  Aho-Corasick     │────▶│  Match regions   │────▶│  3,969 params  │
+ git          │  O(n) single-pass │     │  per candidate   │     │  99.5% acc     │
+              └───────────────────┘     └──────────────────┘     └───────┬────────┘
+                                                                         │
+                                                                         ▼
+                                                                 ┌────────────────┐
+                                                                 │  Live Verify   │
+                                                                 │  (optional)    │
+                                                                 │  async tokio   │
+                                                                 └────────────────┘
 ```
 
 ### Decode-Through Scanning
 
-KeyHog recursively decodes common encodings **before** pattern matching:
+Before pattern matching, KeyHog recursively decodes:
 
-- Base64 (standard, URL-safe)
-- Hexadecimal
-- URL encoding
-- Quoted-printable
-- Unicode escapes
+- **Base64** (standard + URL-safe)
+- **Hexadecimal**
+- **URL encoding**
+- **Quoted-printable**
+- **Unicode escapes**
 
 ```python
-# This is detected:
-encoded = "Z2hwX3h4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4"  # base64 of ghp_...
+# KeyHog catches this. Other scanners don't.
+encoded = "Z2hwX3h4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4"  # base64(ghp_...)
 ```
 
-### Structural Context Analysis
+### Structural Context
 
-Same token, different context, different confidence:
+Same credential, different context, different confidence:
 
 ```python
-# 82% confidence - production config
+# 82% — production config
 production_config = "ghp_xxxxxxxxxxxxxxxxxxxx"
 
-# 25% confidence - test fixture
+# 25% — test fixture (auto-detected via AST context)
 def test_auth():
-    token = "ghp_xxxxxxxxxxxxxxxxxxxx"  # keyhog:ignore
+    token = "ghp_xxxxxxxxxxxxxxxxxxxx"
 ```
 
 ### Adding Detectors
 
-Detectors are defined in TOML—no code changes required:
+Detectors are TOML — no code changes needed:
 
 ```toml
 # detectors/my-service.toml
@@ -310,13 +222,100 @@ type = "bearer"
 field = "match"
 ```
 
+## Configuration
+
+### `.keyhog.toml`
+
+```toml
+detectors = "detectors"       # Path to detector TOML files
+severity = "medium"            # Minimum: info | low | medium | high | critical
+format = "text"                # Output: text | json | jsonl | sarif
+min_confidence = 0.7           # ML confidence threshold (0.0–1.0)
+threads = 8                    # Parallel scan threads
+dedup = "credential"           # Dedup: credential | file | none
+deep = true                    # Enable decode-through + entropy + multiline
+timeout = 10                   # Verification timeout (seconds)
+show_secrets = false            # Redact credentials in output
+```
+
+### `.keyhogignore`
+
+```gitignore
+# Paths
+path:tests/**
+path:**/*.md
+
+# Detectors
+detector:entropy
+detector:generic-api-key
+
+# Specific findings by hash
+hash:abc123def456
+```
+
+### Inline suppression
+
+```python
+# keyhog:ignore
+GITHUB_TOKEN = "ghp_xxxxxxxxxxxxxxxxxxxx"
+
+# keyhog:ignore detector=github-token
+api_key = "ghp_yyyyyyyyyyyyyyyyyyyy"
+
+# keyhog:ignore reason="public CI token"
+TOKEN = "ghp_zzzzzzzzzzzzzzzzzzzz"
+```
+
+## Modular Builds
+
+```bash
+# Full build (default)
+cargo build --release
+
+# Fast mode: regex-only, no ML/decode/multiline — for pre-commit hooks
+cargo build --release --no-default-features --features fast
+
+# With live verification
+cargo build --release --features verify
+```
+
+## Performance
+
+All benchmarks: AMD Ryzen 9 5900X, 32 GB RAM, NVMe SSD.
+
+### Throughput
+
+| Detectors | 1 MB | 10 MB | 100 MB |
+|-----------|------|-------|--------|
+| 100 | 55 MB/s | 58 MB/s | 62 MB/s |
+| 500 | 48 MB/s | 52 MB/s | 56 MB/s |
+| 886 | 42 MB/s | 46 MB/s | 50 MB/s |
+
+### Real-World Repos
+
+| Repository | Size | KeyHog | TruffleHog | Gitleaks |
+|------------|------|--------|------------|----------|
+| facebook/react | 350 MB | **8s** | 25s | 45s |
+| denoland/deno | 900 MB | **18s** | 55s | 95s |
+| rust-lang/rust | 2.1 GB | **42s** | 120s | 200s |
+
+### Verification Latency
+
+| Service | Status | Latency |
+|---------|--------|---------|
+| AWS | ✓ | ~200ms |
+| GitHub | ✓ | ~150ms |
+| Slack | ✓ | ~180ms |
+| Stripe | ✓ | ~220ms |
+| OpenAI | ✓ | ~250ms |
+
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).
 
 ---
 
 <p align="center">
-  <strong>KeyHog</strong> by <a href="https://santh.io">SanthSecurity</a><br/>
-  Built with Rust 🦀 · Zero dependencies in core · <a href="https://keyhog.santh.io">keyhog.santh.io</a>
+  <strong>KeyHog</strong> by <a href="https://santh.io">Santh</a><br/>
+  Built with Rust · Zero dependencies in core · <a href="https://keyhog.santh.io">keyhog.santh.io</a>
 </p>

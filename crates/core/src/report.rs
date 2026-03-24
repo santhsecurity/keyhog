@@ -1,5 +1,7 @@
 //! Report formatters: text, JSON, JSONL, and SARIF output for scanner findings.
 
+/// Animated ASCII-art banner with true-color gradient rendering.
+pub mod banner;
 mod json;
 mod sarif;
 mod text;

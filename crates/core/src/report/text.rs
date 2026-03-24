@@ -5,13 +5,16 @@ use std::io::Write;
 
 use crate::{MatchLocation, Severity, VerificationResult, VerifiedFinding};
 
+use super::banner;
 use super::{ReportError, Reporter};
 
-/// Human-readable text output.
+/// Human-readable text output with gradient banner and styled findings.
 pub struct TextReporter<W: Write> {
     writer: W,
     count: usize,
     color: bool,
+    live_count: usize,
+    dead_count: usize,
 }
 
 impl<W: Write> TextReporter<W> {
@@ -26,22 +29,13 @@ impl<W: Write> TextReporter<W> {
             writer,
             count: 0,
             color,
+            live_count: 0,
+            dead_count: 0,
         }
     }
 
     fn print_header(&mut self) -> Result<(), ReportError> {
-        let border = dim(
-            "===============================================================",
-            self.color,
-        );
-        writeln!(self.writer, "\n{}", border)?;
-        writeln!(
-            self.writer,
-            "  {} {}",
-            highlight("KEYHOG", self.color),
-            colorize("Security Scan", "36", self.color)
-        )?;
-        writeln!(self.writer, "{}\n", border)?;
+        banner::print_banner(&mut self.writer, self.color, false)?;
         Ok(())
     }
 }
@@ -53,94 +47,126 @@ impl<W: Write> Reporter for TextReporter<W> {
         }
         self.count += 1;
 
-        let severity = format_severity(finding.severity, self.color);
+        // Track verification stats
+        match &finding.verification {
+            VerificationResult::Live => self.live_count += 1,
+            VerificationResult::Dead => self.dead_count += 1,
+            _ => {}
+        }
+
+        let severity_str = format_severity(finding.severity, self.color);
         let verified = format_verification(&finding.verification, self.color);
         let location = format_location(&finding.location);
         let confidence = format_confidence(finding.confidence.unwrap_or(0.0), self.color);
 
-        let title_color = match finding.severity {
+        // Severity color for the box border
+        let border_ansi = match finding.severity {
             Severity::Critical => "1;31",
             Severity::High => "31",
             Severity::Medium => "33",
             Severity::Low => "36",
-            Severity::Info => "37",
+            Severity::Info => "90",
         };
 
+        // Top border with severity and detector name
         writeln!(
             self.writer,
-            "{} {}",
-            colorize("■", title_color, self.color),
-            highlight(&finding.detector_name, self.color),
+            "  {} {} {}",
+            colorize("┌", border_ansi, self.color),
+            severity_str,
+            colorize(
+                &format!("─── {}", finding.detector_name),
+                border_ansi,
+                self.color,
+            ),
         )?;
 
+        // Secret
         writeln!(
             self.writer,
-            "  {} │ {} {} {}",
-            dim("Severity:", self.color),
-            severity,
+            "  {} {} {}",
+            colorize("│", border_ansi, self.color),
+            dim("Secret:    ", self.color),
+            highlight(&finding.credential_redacted, self.color),
+        )?;
+
+        // Location
+        writeln!(
+            self.writer,
+            "  {} {} {}",
+            colorize("│", border_ansi, self.color),
+            dim("Location:  ", self.color),
+            location,
+        )?;
+
+        // Confidence + verification
+        let verify_suffix = if verified.is_empty() {
+            String::new()
+        } else {
+            format!("  ({})", verified)
+        };
+        writeln!(
+            self.writer,
+            "  {} {} {}{}",
+            colorize("│", border_ansi, self.color),
+            dim("Confidence:", self.color),
             confidence,
-            if verified.is_empty() {
-                String::new()
-            } else {
-                format!("({})", verified)
-            }
+            verify_suffix,
         )?;
 
-        writeln!(
-            self.writer,
-            "  {} │ {}",
-            dim("Secret:  ", self.color),
-            highlight(&finding.credential_redacted, self.color)
-        )?;
-
-        writeln!(
-            self.writer,
-            "  {} │ {}",
-            dim("Location:", self.color),
-            location
-        )?;
-
+        // Commit info
         if let Some(commit) = &finding.location.commit {
             writeln!(
                 self.writer,
-                "  {} │ {}",
-                dim("Commit:  ", self.color),
-                commit
+                "  {} {} {}",
+                colorize("│", border_ansi, self.color),
+                dim("Commit:    ", self.color),
+                commit,
             )?;
         }
 
         if let Some(author) = &finding.location.author {
             writeln!(
                 self.writer,
-                "  {} │ {}",
-                dim("Author:  ", self.color),
-                author
+                "  {} {} {}",
+                colorize("│", border_ansi, self.color),
+                dim("Author:    ", self.color),
+                author,
             )?;
         }
 
         if let Some(date) = &finding.location.date {
-            writeln!(self.writer, "  {} │ {}", dim("Date:    ", self.color), date)?;
+            writeln!(
+                self.writer,
+                "  {} {} {}",
+                colorize("│", border_ansi, self.color),
+                dim("Date:      ", self.color),
+                date,
+            )?;
         }
 
+        // Extra metadata
         for (key, value) in &finding.metadata {
             writeln!(
                 self.writer,
-                "  {} │ {}",
-                dim(&format!("{:<9}", format!("{}:", key)), self.color),
-                value
+                "  {} {} {}",
+                colorize("│", border_ansi, self.color),
+                dim(&format!("{:<11}", format!("{}:", key)), self.color),
+                value,
             )?;
         }
 
         if !finding.additional_locations.is_empty() {
             writeln!(
                 self.writer,
-                "  {} │ (+{} more locations)",
-                dim("Extra:   ", self.color),
-                finding.additional_locations.len()
+                "  {} {} (+{} more locations)",
+                colorize("│", border_ansi, self.color),
+                dim("Extra:     ", self.color),
+                finding.additional_locations.len(),
             )?;
         }
 
-        // Remediation hint
+        // Remediation
         let remediation = match finding.severity {
             Severity::Critical | Severity::High => "Revoke immediately and rotate.",
             Severity::Medium => "Review usage and rotate if active.",
@@ -148,85 +174,109 @@ impl<W: Write> Reporter for TextReporter<W> {
         };
         writeln!(
             self.writer,
-            "  {} │ {}",
-            dim("Action:  ", self.color),
-            colorize(remediation, "3;32", self.color)
+            "  {} {} {}",
+            colorize("│", border_ansi, self.color),
+            dim("Action:    ", self.color),
+            colorize(remediation, "3;32", self.color),
         )?;
 
-        writeln!(self.writer)?;
+        // Bottom border
+        writeln!(
+            self.writer,
+            "  {}\n",
+            colorize(
+                "└─────────────────────────────────────────────",
+                border_ansi,
+                self.color,
+            ),
+        )?;
 
         Ok(())
     }
 
     fn finish(&mut self) -> Result<(), ReportError> {
-        let border = dim(
-            "===============================================================",
-            self.color,
-        );
         if self.count == 0 {
             self.print_header()?;
             writeln!(
                 self.writer,
                 "  {}\n",
-                colorize(
-                    "🎉 No secrets found! Your code is clean.",
-                    "1;32",
-                    self.color
-                )
+                colorize("No secrets found. Your code is clean.", "1;32", self.color),
             )?;
         } else {
-            writeln!(self.writer, "{}", border)?;
+            let summary_border =
+                colorize("━━━ Results ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "90", self.color);
+            writeln!(self.writer, "  {}", summary_border)?;
+
+            let plural = if self.count == 1 { "" } else { "s" };
+
+            let mut parts = vec![
+                highlight(&format!("{} secret{plural} found", self.count), self.color),
+            ];
+            if self.live_count > 0 {
+                parts.push(colorize(
+                    &format!("{} live", self.live_count),
+                    "1;31",
+                    self.color,
+                ));
+            }
+            if self.dead_count > 0 {
+                parts.push(colorize(
+                    &format!("{} dead", self.dead_count),
+                    "32",
+                    self.color,
+                ));
+            }
+            let unverified = self.count - self.live_count - self.dead_count;
+            if unverified > 0 {
+                parts.push(colorize(
+                    &format!("{unverified} unverified"),
+                    "33",
+                    self.color,
+                ));
+            }
+
+            writeln!(self.writer, "  {}", parts.join(" · "))?;
+
+            // Next steps
+            writeln!(self.writer)?;
             writeln!(
                 self.writer,
-                "  {}\n",
-                highlight(
-                    &format!(
-                        "⚠️  Found {} secret{}.",
-                        self.count,
-                        if self.count == 1 { "" } else { "s" }
-                    ),
-                    self.color
-                ),
+                "  {} Revoke active secrets in the provider's dashboard.",
+                colorize("1.", "1;31", self.color),
             )?;
             writeln!(
                 self.writer,
-                "  {}",
-                highlight("Actionable Next Steps:", self.color)
+                "  {} Remove credentials from codebase and git history.",
+                colorize("2.", "1;33", self.color),
             )?;
             writeln!(
                 self.writer,
-                "    1. {} Revoke the active secrets immediately in the provider's dashboard.",
-                colorize("Revoke:", "1;31", self.color)
+                "  {} Use a secure secret manager or environment variables.",
+                colorize("3.", "1;32", self.color),
             )?;
-            writeln!(
-                self.writer,
-                "    2. {} Remove the credentials from your codebase and git history.",
-                colorize("Clean:", "1;33", self.color)
-            )?;
-            writeln!(
-                self.writer,
-                "    3. {} Use a secure secret manager or environment variables instead.\n",
-                colorize("Secure:", "1;32", self.color)
-            )?;
+
+            let end_border =
+                colorize("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "90", self.color);
+            writeln!(self.writer, "\n  {}\n", end_border)?;
         }
         Ok(())
     }
 }
 
 fn format_severity(severity: Severity, color: bool) -> String {
-    let style = match severity {
-        Severity::Critical => "1;31",
-        Severity::High => "31",
-        Severity::Medium => "33",
-        Severity::Low => "36",
-        Severity::Info => "37",
+    let (label, style) = match severity {
+        Severity::Critical => ("CRITICAL", "1;31"),
+        Severity::High => ("HIGH", "31"),
+        Severity::Medium => ("MEDIUM", "33"),
+        Severity::Low => ("LOW", "36"),
+        Severity::Info => ("INFO", "90"),
     };
-    colorize(&format!("{:>8}", severity.to_string()), style, color)
+    colorize(&format!("{:>8}", label), style, color)
 }
 
 fn format_verification(result: &VerificationResult, color: bool) -> String {
     match result {
-        VerificationResult::Live => colorize("LIVE", "1;31;43", color), // bold red on yellow background
+        VerificationResult::Live => colorize("LIVE", "1;31;43", color),
         VerificationResult::Dead => colorize("dead", "32", color),
         VerificationResult::RateLimited => colorize("limited", "33", color),
         VerificationResult::Error(_) => colorize("error", "33", color),
@@ -243,12 +293,12 @@ fn format_location(location: &MatchLocation) -> String {
 }
 
 fn format_confidence(confidence: f64, color: bool) -> String {
-    const CONFIDENCE_BAR_WIDTH: usize = 6;
-    let filled = (confidence * CONFIDENCE_BAR_WIDTH as f64) as usize;
+    const BAR_WIDTH: usize = 6;
+    let filled = (confidence * BAR_WIDTH as f64) as usize;
     let bar = format!(
         "{}{}",
-        "■".repeat(filled.min(CONFIDENCE_BAR_WIDTH)),
-        "□".repeat(CONFIDENCE_BAR_WIDTH.saturating_sub(filled.min(CONFIDENCE_BAR_WIDTH)))
+        "■".repeat(filled.min(BAR_WIDTH)),
+        "□".repeat(BAR_WIDTH.saturating_sub(filled.min(BAR_WIDTH)))
     );
     let tone = if confidence >= 0.8 {
         "31"
@@ -260,16 +310,20 @@ fn format_confidence(confidence: f64, color: bool) -> String {
     format!(
         "{} {}",
         colorize(&bar, tone, color),
-        colorize(&format!("{:>3}%", (confidence * 100.0) as u32), "90", color)
+        colorize(
+            &format!("{:>3}%", (confidence * 100.0) as u32),
+            "90",
+            color,
+        )
     )
 }
 
 fn highlight(text: &str, color: bool) -> String {
-    colorize(text, "1", color) // Bold
+    colorize(text, "1", color)
 }
 
 fn dim(text: &str, color: bool) -> String {
-    colorize(text, "90", color) // Gray
+    colorize(text, "90", color)
 }
 
 fn colorize(text: &str, ansi: &str, color: bool) -> String {
