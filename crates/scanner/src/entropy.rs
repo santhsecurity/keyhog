@@ -508,7 +508,7 @@ fn is_likely_concatenation_fragment(line: &str) -> bool {
 /// Shared plausibility filter with two modes:
 /// - candidate mode: allows hex strings so keyword-guided extraction can inspect them later
 /// - secret mode: rejects hex-only strings and requires high entropy
-
+///
 /// Controls how strict plausibility filtering is.
 enum PlausibilityMode {
     /// Lenient: allows hex strings, used for keyword-context candidates.
@@ -798,7 +798,7 @@ TOKEN=xxxxxxxxxxxxxxxxxxxx
     }
 
     #[test]
-    
+
     fn keyword_free_scan_detects_long_high_entropy_strings() {
         let secret = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!@";
         let text = format!("prefix\n  value: \"{secret}\"\nsuffix\n");
@@ -844,7 +844,7 @@ TOKEN=xxxxxxxxxxxxxxxxxxxx
     }
 
     #[test]
-    
+
     fn context_lines_include_neighboring_lines() {
         let secret = "aK7xP9mQ2wE5rT8yU1iO3pA6sD4fG0hJkL";
         let text = format!("API_KEY=placeholder\n  value: \"{secret}\"\n");
@@ -876,15 +876,34 @@ TOKEN=xxxxxxxxxxxxxxxxxxxx
 /// Case-insensitive placeholder check without heap allocation.
 fn is_placeholder_ci(bytes: &[u8]) -> bool {
     const PLACEHOLDERS: &[&[u8]] = &[
-        b"example", b"placeholder", b"change_me", b"changeme",
-        b"your_", b"your-", b"xxx", b"todo", b"fixme",
-        b"replace", b"insert", b"enter_", b"enter-",
-        b"dummy", b"sample", b"demo", b"fake", b"mock",
-        b"goes-here", b"fill_in", b"not-a-real", b"not_a_real",
+        b"example",
+        b"placeholder",
+        b"change_me",
+        b"changeme",
+        b"your_",
+        b"your-",
+        b"xxx",
+        b"todo",
+        b"fixme",
+        b"replace",
+        b"insert",
+        b"enter_",
+        b"enter-",
+        b"dummy",
+        b"sample",
+        b"demo",
+        b"fake",
+        b"mock",
+        b"goes-here",
+        b"fill_in",
+        b"not-a-real",
+        b"not_a_real",
     ];
-    PLACEHOLDERS.iter().any(|p| {
-        bytes.windows(p.len()).any(|w| w.eq_ignore_ascii_case(p))
-    }) || bytes.contains(&b'<') || bytes.contains(&b'>')
+    PLACEHOLDERS
+        .iter()
+        .any(|p| bytes.windows(p.len()).any(|w| w.eq_ignore_ascii_case(p)))
+        || bytes.contains(&b'<')
+        || bytes.contains(&b'>')
         || matches!(
             bytes,
             b"null" | b"none" | b"undefined" | b"empty" | b"default" | b"secret" | b"password"

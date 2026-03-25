@@ -4,6 +4,7 @@ description = "CLI binary for the secret scanner"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "keyhog"

@@ -75,7 +75,15 @@ fn collect_added_lines(
 
     // Run git diff to get unified diff output
     let output = Command::new("git")
-        .args(["-C", &repo_arg, "diff", "-U0", "--end-of-options", &base_commit, &head_commit])
+        .args([
+            "-C",
+            &repo_arg,
+            "diff",
+            "-U0",
+            "--end-of-options",
+            &base_commit,
+            &head_commit,
+        ])
         .output()
         .map_err(SourceError::Io)?;
 

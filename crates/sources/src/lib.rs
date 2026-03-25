@@ -9,7 +9,6 @@ mod binary;
 #[cfg(feature = "docker")]
 mod docker;
 mod filesystem;
-mod strings;
 #[cfg(feature = "git")]
 mod git;
 #[cfg(feature = "git")]
@@ -21,6 +20,7 @@ mod github_org;
 #[cfg(feature = "s3")]
 mod s3;
 mod stdin;
+mod strings;
 
 #[cfg(feature = "binary")]
 pub use binary::BinarySource;

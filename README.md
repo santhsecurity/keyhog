@@ -25,14 +25,13 @@
 ```
 $ keyhog scan --path .
 
-  ⠀⠀⠀⣠⣤⣤⣤⣄⠀⠀⠀
-  ⠀⠀⣴⣿⣿⣿⣿⣿⣦⠀⠀   KeyHog v0.1.0
-  ⠀⣼⣿⡇⠀⣿⠀⢸⣿⣧⠀   by SanthSecurity
-  ⠀⣿⣿⡇⠀⣿⠀⢸⣿⣿⠀
-  ⠀⠹⣿⣿⣿⣿⣿⣿⣿⠏⠀   886 detectors loaded
-  ⠀⠀⠈⠛⢿⣿⡿⠛⠁⠀⠀   ML classifier ready
-  ⠀⠀⠀⠀⢸⣿⡇⠀⠀⠀⠀
-  ⠀⠀⠀⠀⢸⣿⡇⠀⠀⠀⠀
+  ██   ██ ████████ ██    ██ ██   ██  ██████   ██████
+  ██  ██  ██        ██  ██  ██   ██ ██    ██ ██
+  █████   █████      ████   ███████ ██    ██ ██   ███
+  ██  ██  ██          ██    ██   ██ ██    ██ ██    ██
+  ██   ██ ████████    ██    ██   ██  ██████   ██████
+  v1.0.0 · Secret Scanner · 886 detectors
+  by SanthSecurity
 
   critical  82%  ██████░░  GitHub Classic PAT
                  ghp_...7890  src/config.py:42

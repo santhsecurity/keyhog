@@ -203,15 +203,19 @@ impl<W: Write> Reporter for TextReporter<W> {
                 colorize("No secrets found. Your code is clean.", "1;32", self.color),
             )?;
         } else {
-            let summary_border =
-                colorize("━━━ Results ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "90", self.color);
+            let summary_border = colorize(
+                "━━━ Results ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                "90",
+                self.color,
+            );
             writeln!(self.writer, "  {}", summary_border)?;
 
             let plural = if self.count == 1 { "" } else { "s" };
 
-            let mut parts = vec![
-                highlight(&format!("{} secret{plural} found", self.count), self.color),
-            ];
+            let mut parts = vec![highlight(
+                &format!("{} secret{plural} found", self.count),
+                self.color,
+            )];
             if self.live_count > 0 {
                 parts.push(colorize(
                     &format!("{} live", self.live_count),
@@ -255,8 +259,11 @@ impl<W: Write> Reporter for TextReporter<W> {
                 colorize("3.", "1;32", self.color),
             )?;
 
-            let end_border =
-                colorize("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "90", self.color);
+            let end_border = colorize(
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                "90",
+                self.color,
+            );
             writeln!(self.writer, "\n  {}\n", end_border)?;
         }
         Ok(())
@@ -310,11 +317,7 @@ fn format_confidence(confidence: f64, color: bool) -> String {
     format!(
         "{} {}",
         colorize(&bar, tone, color),
-        colorize(
-            &format!("{:>3}%", (confidence * 100.0) as u32),
-            "90",
-            color,
-        )
+        colorize(&format!("{:>3}%", (confidence * 100.0) as u32), "90", color,)
     )
 }
 

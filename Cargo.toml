@@ -13,6 +13,8 @@ default-members = ["crates/cli"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = "A high-performance secret scanner"
+repository = "https://github.com/Santh/keyhog"
 
 [workspace.dependencies]
 keyhog-core = { path = "crates/core" }

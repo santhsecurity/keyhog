@@ -76,9 +76,10 @@ impl BinarySource {
             .spawn()
             .and_then(|mut child| {
                 let timeout = std::time::Duration::from_secs(GHIDRA_TIMEOUT_SECS);
-                match child.wait_timeout(timeout).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, e)
-                })? {
+                match child
+                    .wait_timeout(timeout)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+                {
                     Some(status) => Ok(status),
                     None => {
                         let _ = child.kill();
@@ -234,10 +235,7 @@ fn find_ghidra_headless() -> Option<PathBuf> {
     }
 
     // Check PATH
-    if let Ok(output) = Command::new("which")
-        .arg("analyzeHeadless")
-        .output()
-    {
+    if let Ok(output) = Command::new("which").arg("analyzeHeadless").output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -263,10 +261,7 @@ fn find_ghidra_headless() -> Option<PathBuf> {
 }
 
 /// Write a Ghidra postScript that runs analysis and exports decompiled C.
-fn write_ghidra_script(
-    script_path: &Path,
-    output_path: &Path,
-) -> Result<(), SourceError> {
+fn write_ghidra_script(script_path: &Path, output_path: &Path) -> Result<(), SourceError> {
     let script = format!(
         r#"// KeyHog Ghidra export script — runs full analysis then decompiles all functions.
 // @category KeyHog
@@ -320,7 +315,11 @@ public class ExportDecompiled extends GhidraScript {{
 "#,
         // Escape the path for Java string literal: backslashes and quotes must
         // be doubled/escaped so the generated Java source compiles correctly.
-        output = output_path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"")
+        output = output_path
+            .display()
+            .to_string()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
     );
 
     std::fs::write(script_path, script).map_err(SourceError::Io)
@@ -399,8 +398,14 @@ fn extract_sections(bytes: &[u8], path: &str) -> Option<Vec<Chunk>> {
 
     // High-value section names where secrets are commonly embedded
     let target_sections = &[
-        ".rodata", ".rdata", ".data", ".const", ".cstring",
-        "__cstring", "__const", "__data",
+        ".rodata",
+        ".rdata",
+        ".data",
+        ".const",
+        ".cstring",
+        "__cstring",
+        "__const",
+        "__data",
     ];
 
     match obj {
@@ -431,7 +436,9 @@ fn extract_sections(bytes: &[u8], path: &str) -> Option<Vec<Chunk>> {
         }
         Object::PE(pe) => {
             for section in &pe.sections {
-                let name = std::str::from_utf8(&section.name).unwrap_or("").trim_end_matches('\0');
+                let name = std::str::from_utf8(&section.name)
+                    .unwrap_or("")
+                    .trim_end_matches('\0');
                 if target_sections.iter().any(|t| name == *t) {
                     let start = section.pointer_to_raw_data as usize;
                     let end = (start + section.size_of_raw_data as usize).min(bytes.len());
@@ -464,7 +471,8 @@ fn extract_sections(bytes: &[u8], path: &str) -> Option<Vec<Chunk>> {
                             let end = (start + section.size as usize).min(bytes.len());
                             if start < end {
                                 let section_bytes = &bytes[start..end];
-                                let strings = extract_printable_strings(section_bytes, MIN_STRING_LEN);
+                                let strings =
+                                    extract_printable_strings(section_bytes, MIN_STRING_LEN);
                                 if !strings.is_empty() {
                                     chunks.push(Chunk {
                                         data: strings.join("\n"),
@@ -486,7 +494,11 @@ fn extract_sections(bytes: &[u8], path: &str) -> Option<Vec<Chunk>> {
         _ => {}
     }
 
-    if chunks.is_empty() { None } else { Some(chunks) }
+    if chunks.is_empty() {
+        None
+    } else {
+        Some(chunks)
+    }
 }
 
 #[cfg(test)]

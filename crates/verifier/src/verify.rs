@@ -706,16 +706,14 @@ fn body_indicates_error(body: &str) -> bool {
     // field often reflects request delivery, not auth success.
     // However, `"error": null` is a common pattern meaning "no error"
     // and should NOT trigger error detection.
-    let has_explicit_error_key = lower
-        .match_indices("\"error\"")
-        .any(|(pos, _)| {
-            let after = lower[pos + "\"error\"".len()..].trim_start();
-            after.starts_with(':') && {
-                let value_start = after[1..].trim_start();
-                // "error": null means "no error" — don't treat as error
-                !value_start.starts_with("null")
-            }
-        });
+    let has_explicit_error_key = lower.match_indices("\"error\"").any(|(pos, _)| {
+        let after = lower[pos + "\"error\"".len()..].trim_start();
+        after.starts_with(':') && {
+            let value_start = after[1..].trim_start();
+            // "error": null means "no error" — don't treat as error
+            !value_start.starts_with("null")
+        }
+    });
 
     if has_explicit_error_key {
         return true;

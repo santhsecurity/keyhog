@@ -7,7 +7,9 @@ mod validate;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub use load::{load_detectors, load_detectors_with_gate, load_detector_cache, save_detector_cache};
+pub use load::{
+    load_detector_cache, load_detectors, load_detectors_with_gate, save_detector_cache,
+};
 pub use validate::{QualityIssue, validate_detector};
 
 /// A single detector specification, parsed from a TOML file.

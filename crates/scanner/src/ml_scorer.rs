@@ -65,7 +65,16 @@ const PLACEHOLDER_KEYWORDS: &[&str] = &[
 ];
 const COMMENT_PREFIXES: &[&str] = &["#", "//", "/*", "--"];
 const BINARY_MARKERS: &[&str] = &[
-    "load:", ".rodata", "xref", "lea rdi", "go.string", "core::str", "alloc::string", "objdump", "strings:", "symbol:"
+    "load:",
+    ".rodata",
+    "xref",
+    "lea rdi",
+    "go.string",
+    "core::str",
+    "alloc::string",
+    "objdump",
+    "strings:",
+    "symbol:",
 ];
 const CI_MARKERS: &[&str] = &[
     "jobs:",
@@ -567,7 +576,7 @@ mod tests {
     }
 
     #[test]
-    
+
     fn placeholder_scores_low() {
         let text = "YOUR_API_KEY_HERE";
         let context = "API_KEY=YOUR_API_KEY_HERE";

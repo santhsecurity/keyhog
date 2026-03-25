@@ -8,7 +8,6 @@ use walkdir::WalkDir;
 /// Minimum file size to use memory mapping (4 KiB roughly matches a page and
 /// avoids mmap overhead on tiny files).
 const MMAP_THRESHOLD: u64 = 4096;
-const MAX_READABLE_FILE_SIZE: u64 = usize::MAX as u64;
 
 /// Scans files in a directory tree.
 pub struct FilesystemSource {
@@ -124,14 +123,6 @@ impl Source for FilesystemSource {
                     max_size
                 ))));
             }
-            if file_size > MAX_READABLE_FILE_SIZE {
-                return Some(Err(SourceError::Other(format!(
-                    "skipping {}: file size {} exceeds this platform's readable limit",
-                    path.display(),
-                    file_size
-                ))));
-            }
-
             // Read file content. If the file is binary (contains null bytes),
             // extract printable strings instead of returning raw content.
             let file_text = if file_size >= MMAP_THRESHOLD {
@@ -363,8 +354,14 @@ mod tests {
         let source = FilesystemSource::new(dir.clone());
         let chunks: Vec<_> = source.chunks().filter_map(|r| r.ok()).collect();
         // Binary-ish files now get string extraction instead of being skipped
-        assert!(!chunks.is_empty(), "Binary files should produce string-extracted chunks");
-        assert!(chunks[0].data.contains("SECRET_KEY"), "Extracted strings should contain the secret prefix");
+        assert!(
+            !chunks.is_empty(),
+            "Binary files should produce string-extracted chunks"
+        );
+        assert!(
+            chunks[0].data.contains("SECRET_KEY"),
+            "Extracted strings should contain the secret prefix"
+        );
         assert_eq!(chunks[0].metadata.source_type, "filesystem:binary-strings");
 
         let _ = fs::remove_dir_all(&dir);

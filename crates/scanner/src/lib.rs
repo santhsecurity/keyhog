@@ -26,21 +26,21 @@ pub mod decode;
 /// Entropy-based fallback detection for unknown secret formats.
 #[cfg(feature = "entropy")]
 pub mod entropy;
+#[cfg(feature = "gpu")]
+pub mod gpu;
 #[allow(clippy::excessive_precision)]
 /// Embedded ML scorer used to downrank likely placeholders and noise.
 #[cfg(feature = "ml")]
 pub mod ml_scorer;
-#[cfg(feature = "gpu")]
-pub mod gpu;
 /// Multi-line preprocessing for string concatenation and line continuations.
 #[cfg(feature = "multiline")]
 pub mod multiline;
 /// Prefix propagation tables for literal-prefix matching.
 pub mod prefix_trie;
-/// Vectorscan/Hyperscan SIMD regex backend (optional, feature-gated).
-pub mod simd;
 /// Match-resolution helpers for suppressing lower-quality overlaps.
 pub mod resolution;
+/// Vectorscan/Hyperscan SIMD regex backend (optional, feature-gated).
+pub mod simd;
 
 #[cfg(test)]
 #[allow(clippy::manual_range_contains, clippy::useless_format)]
@@ -376,7 +376,7 @@ impl CompiledScanner {
         };
         #[cfg(not(feature = "multiline"))]
         let preprocessed = ScannerPreprocessedText::passthrough(&chunk.data);
-        
+
         let line_offsets = compute_line_offsets(&preprocessed.text);
         let code_lines: Vec<&str> = chunk.data.lines().collect();
         let documentation_lines = context::documentation_line_flags(&code_lines);
@@ -392,7 +392,7 @@ impl CompiledScanner {
         // need Rust regex for capture group extraction. The double work (HS scan +
         // regex confirmation) is more expensive than AC prefilter + selective regex.
         // HS would help if we had 10K+ patterns where AC automaton size is the bottleneck.
-        #[cfg(feature = "simd_scan")]
+        #[cfg(feature = "simd")]
         let used_simd = if let Some(hs) = &self.hs_scanner {
             let hs_matches = hs.scan(preprocessed.text.as_bytes());
             // Collect unique pattern indices that HS triggered
@@ -403,7 +403,9 @@ impl CompiledScanner {
                 }
             }
             // Run the Rust regex for each triggered pattern to extract matches
-            let all_patterns: Vec<&CompiledPattern> = self.ac_map.iter()
+            let all_patterns: Vec<&CompiledPattern> = self
+                .ac_map
+                .iter()
                 .chain(self.fallback.iter().map(|(p, _)| p))
                 .collect();
             for &(_det_idx, pat_idx) in &triggered_set {
@@ -426,27 +428,27 @@ impl CompiledScanner {
         } else {
             false
         };
-        #[cfg(not(feature = "simd_scan"))]
+        #[cfg(not(feature = "simd"))]
         let used_simd = false;
 
         if !used_simd {
-        // Standard path: AC prefilter + fallback keyword scanning
-        let expanded_patterns = self.collect_expanded_patterns(&preprocessed.text);
-        let triggered: Vec<usize> = (0..self.ac_map.len())
-            .filter(|&i| (expanded_patterns[i / 64] & (1 << (i % 64))) != 0)
-            .collect();
-        self.scan_prefiltered_patterns(
-            &triggered,
-            &preprocessed,
-            &line_offsets,
-            &code_lines,
-            &documentation_lines,
-            chunk,
-            &mut scan_state.matches,
-            &mut scan_state.ml_score_cache,
-            &mut scan_state.ml_cache_order,
-            &mut scan_state.ml_cache_bytes,
-        );
+            // Standard path: AC prefilter + fallback keyword scanning
+            let expanded_patterns = self.collect_expanded_patterns(&preprocessed.text);
+            let triggered: Vec<usize> = (0..self.ac_map.len())
+                .filter(|&i| (expanded_patterns[i / 64] & (1 << (i % 64))) != 0)
+                .collect();
+            self.scan_prefiltered_patterns(
+                &triggered,
+                &preprocessed,
+                &line_offsets,
+                &code_lines,
+                &documentation_lines,
+                chunk,
+                &mut scan_state.matches,
+                &mut scan_state.ml_score_cache,
+                &mut scan_state.ml_cache_order,
+                &mut scan_state.ml_cache_bytes,
+            );
         }
         if !used_simd {
             self.scan_fallback_patterns(
@@ -583,7 +585,6 @@ impl CompiledScanner {
         self.expand_triggered_patterns(&triggered_patterns)
     }
 
-
     fn collect_triggered_patterns(&self, text: &str) -> Vec<u64> {
         let mut triggered_patterns = vec![0u64; self.ac_map.len().div_ceil(64)];
         for ac_match in self.ac.find_iter(text) {
@@ -598,10 +599,7 @@ impl CompiledScanner {
         triggered_patterns
     }
 
-    fn expand_triggered_patterns(
-        &self,
-        triggered_patterns: &[u64],
-    ) -> Vec<u64> {
+    fn expand_triggered_patterns(&self, triggered_patterns: &[u64]) -> Vec<u64> {
         let mut expanded = triggered_patterns.to_vec();
         for pat_idx in 0..self.ac_map.len() {
             if (triggered_patterns[pat_idx / 64] & (1 << (pat_idx % 64))) != 0 {
@@ -717,6 +715,7 @@ impl CompiledScanner {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn scan_large_fallback_patterns(
         &self,
         preprocessed: &ScannerPreprocessedText,
@@ -855,23 +854,23 @@ impl CompiledScanner {
     ) {
         let search_text = &preprocessed.text;
         for matched in entry.regex.find_iter(search_text) {
-                self.process_match(
-                    entry,
-                    detector,
-                    search_text,
-                    preprocessed,
-                    line_offsets,
-                    code_lines,
-                    documentation_lines,
-                    chunk,
-                    matches,
-                    ml_score_cache,
-                    ml_cache_order,
-                    ml_cache_bytes,
-                    matched.as_str(),
-                    matched.start(),
-                    matched.end(),
-                );
+            self.process_match(
+                entry,
+                detector,
+                search_text,
+                preprocessed,
+                line_offsets,
+                code_lines,
+                documentation_lines,
+                chunk,
+                matches,
+                ml_score_cache,
+                ml_cache_order,
+                ml_cache_bytes,
+                matched.as_str(),
+                matched.start(),
+                matched.end(),
+            );
         }
     }
 
@@ -1066,10 +1065,7 @@ fn build_fallback_keyword_ac(
         return (None, Vec::new());
     }
     let keywords: Vec<String> = keyword_map.keys().cloned().collect();
-    let mapping: Vec<Vec<usize>> = keywords
-        .iter()
-        .map(|kw| keyword_map[kw].clone())
-        .collect();
+    let mapping: Vec<Vec<usize>> = keywords.iter().map(|kw| keyword_map[kw].clone()).collect();
     let ac = AhoCorasick::builder()
         .ascii_case_insensitive(true)
         .build(&keywords)
@@ -1313,7 +1309,7 @@ fn floor_char_boundary(text: &str, offset: usize) -> usize {
 
 fn line_number_for_offset(text: &str, offset: usize) -> usize {
     let safe_offset = floor_char_boundary(text, offset);
-    memchr::memchr_iter(b'\n', text[..safe_offset].as_bytes())
+    memchr::memchr_iter(b'\n', &text.as_bytes()[..safe_offset])
         .count()
         .saturating_add(1)
 }
@@ -1944,7 +1940,10 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].credential, secret);
         assert_eq!(matches[0].location.line, Some(2));
-        assert_eq!(matches[0].location.offset, prefix.len() + 1 + "token = ".len());
+        assert_eq!(
+            matches[0].location.offset,
+            prefix.len() + 1 + "token = ".len()
+        );
     }
 
     #[test]

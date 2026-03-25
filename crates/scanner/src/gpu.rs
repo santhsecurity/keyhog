@@ -19,20 +19,20 @@ mod backend {
     /// Below this, CPU is faster due to GPU dispatch overhead.
     const GPU_BATCH_THRESHOLD: usize = 64;
 
+    #[allow(dead_code)]
     const INPUT_DIM: usize = 41;
+    #[allow(dead_code)]
     const EXPERT_COUNT: usize = 6;
+    #[allow(dead_code)]
     const HIDDEN1: usize = 32;
+    #[allow(dead_code)]
     const HIDDEN2: usize = 16;
 
     /// Total f32 weights: gate(41*6 + 6) + 6 experts * (41*32+32 + 32*16+16 + 16+1)
+    #[allow(dead_code)]
     const TOTAL_WEIGHT_F32S: usize = (INPUT_DIM * EXPERT_COUNT + EXPERT_COUNT)
         + EXPERT_COUNT
-            * (INPUT_DIM * HIDDEN1
-                + HIDDEN1
-                + HIDDEN1 * HIDDEN2
-                + HIDDEN2
-                + HIDDEN2
-                + 1);
+            * (INPUT_DIM * HIDDEN1 + HIDDEN1 + HIDDEN1 * HIDDEN2 + HIDDEN2 + HIDDEN2 + 1);
 
     #[derive(Clone, Copy, Pod, Zeroable)]
     #[repr(C)]
@@ -80,29 +80,28 @@ mod backend {
             source: wgpu::ShaderSource::Wgsl(MOE_SHADER.into()),
         });
 
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("moe_bgl"),
-                entries: &[
-                    // Weights buffer (read-only storage)
-                    bgl_entry(0, true),
-                    // Input features buffer (read-only storage)
-                    bgl_entry(1, true),
-                    // Output scores buffer (read-write storage)
-                    bgl_entry(2, false),
-                    // Params uniform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("moe_bgl"),
+            entries: &[
+                // Weights buffer (read-only storage)
+                bgl_entry(0, true),
+                // Input features buffer (read-only storage)
+                bgl_entry(1, true),
+                // Output scores buffer (read-write storage)
+                bgl_entry(2, false),
+                // Params uniform
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
-                ],
-            });
+                    count: None,
+                },
+            ],
+        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("moe_pipeline_layout"),
@@ -158,16 +157,14 @@ mod backend {
     }
 
     pub fn get_gpu() -> Option<&'static GpuContext> {
-        GPU.get_or_init(|| {
-            match init_gpu() {
-                Ok(ctx) => {
-                    tracing::info!("GPU MoE inference initialized");
-                    Some(ctx)
-                }
-                Err(e) => {
-                    tracing::debug!("GPU init failed, using CPU fallback: {e}");
-                    None
-                }
+        GPU.get_or_init(|| match init_gpu() {
+            Ok(ctx) => {
+                tracing::info!("GPU MoE inference initialized");
+                Some(ctx)
+            }
+            Err(e) => {
+                tracing::debug!("GPU init failed, using CPU fallback: {e}");
+                None
             }
         })
         .as_ref()
@@ -185,13 +182,13 @@ mod backend {
         // Flatten features into a contiguous f32 buffer
         let flat_features: Vec<f32> = features.iter().flat_map(|f| f.iter().copied()).collect();
 
-        let input_buf =
-            gpu.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("input"),
-                    contents: bytemuck::cast_slice(&flat_features),
-                    usage: wgpu::BufferUsages::STORAGE,
-                });
+        let input_buf = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("input"),
+                contents: bytemuck::cast_slice(&flat_features),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
         let output_size = (batch_size * std::mem::size_of::<f32>()) as u64;
         let output_buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {

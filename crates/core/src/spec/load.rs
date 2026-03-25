@@ -17,10 +17,7 @@ pub fn save_detector_cache(
 }
 
 /// Load detectors from a JSON cache file. Returns None if cache is stale or missing.
-pub fn load_detector_cache(
-    cache_path: &Path,
-    source_dir: &Path,
-) -> Option<Vec<DetectorSpec>> {
+pub fn load_detector_cache(cache_path: &Path, source_dir: &Path) -> Option<Vec<DetectorSpec>> {
     let cache_meta = std::fs::metadata(cache_path).ok()?;
     let cache_mtime = cache_meta.modified().ok()?;
 
@@ -29,12 +26,12 @@ pub fn load_detector_cache(
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().is_some_and(|ext| ext == "toml") {
-            if let Ok(meta) = std::fs::metadata(&path) {
-                if let Ok(mtime) = meta.modified() {
-                    if mtime > cache_mtime {
-                        return None; // Cache is stale
-                    }
-                }
+            let is_stale = std::fs::metadata(&path)
+                .and_then(|meta| meta.modified())
+                .is_ok_and(|mtime| mtime > cache_mtime);
+
+            if is_stale {
+                return None; // Cache is stale
             }
         }
     }

@@ -272,7 +272,11 @@ fn collect_redos_risks(ast: &Ast, stats: &mut RegexComplexityStats, inside_repet
                 stats.has_quantified_overlapping_alternation = true;
             }
             // Only propagate inside_repetition when this is unbounded
-            collect_redos_risks(&repetition.ast, stats, inside_repetition || this_is_unbounded);
+            collect_redos_risks(
+                &repetition.ast,
+                stats,
+                inside_repetition || this_is_unbounded,
+            );
         }
         Ast::Group(group) => collect_redos_risks(&group.ast, stats, inside_repetition),
         Ast::Alternation(alternation) => {

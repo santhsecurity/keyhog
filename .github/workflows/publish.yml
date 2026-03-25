@@ -1,0 +1,75 @@
+name: Publish to crates.io
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # Quality gate: the full CI pipeline must pass before publishing.
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace
+
+  publish:
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish keyhog-core
+        run: cargo publish -p keyhog-core
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      # Wait for crates.io index to propagate the new keyhog-core version
+      # before publishing dependents.
+      - name: Wait for index propagation
+        run: sleep 30
+
+      - name: Publish keyhog-scanner
+        run: cargo publish -p keyhog-scanner
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for index propagation
+        run: sleep 30
+
+      - name: Publish keyhog-sources
+        run: cargo publish -p keyhog-sources
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for index propagation
+        run: sleep 30
+
+      - name: Publish keyhog-verifier
+        run: cargo publish -p keyhog-verifier
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for index propagation
+        run: sleep 30
+
+      - name: Publish keyhog-cli
+        run: cargo publish -p keyhog-cli
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

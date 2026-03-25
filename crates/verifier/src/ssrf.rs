@@ -4,7 +4,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Check if a URL points to a private/internal network (SSRF protection).
 pub(crate) fn is_private_url(url: &str) -> bool {
-    parse_url_host(url).map_or(true, |host| is_private_host(&host))
+    parse_url_host(url).is_none_or(|host| is_private_host(&host))
 }
 
 pub(crate) fn parse_url_host(url: &str) -> Option<String> {
@@ -438,4 +438,3 @@ mod tests {
         assert!(is_private_url("http://metadata.azure.internal/"));
     }
 }
-

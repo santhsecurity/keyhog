@@ -226,7 +226,11 @@ fn fetch_object_chunk(
     }
 
     // Skip objects that declare a binary content type — they won't contain text secrets.
-    if let Some(ct) = response.headers().get("content-type").and_then(|v| v.to_str().ok()) {
+    if let Some(ct) = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+    {
         let ct_lower = ct.to_ascii_lowercase();
         if ct_lower.starts_with("image/")
             || ct_lower.starts_with("audio/")
@@ -244,8 +248,7 @@ fn fetch_object_chunk(
     // lacks byte-stream support, so we use `copy()` into a size-limited
     // buffer to abort before the full response is buffered into memory.
     let mut body = Vec::new();
-    let mut reader = response
-        .take(MAX_S3_OBJECT_BYTES + 1);
+    let mut reader = response.take(MAX_S3_OBJECT_BYTES + 1);
     std::io::Read::read_to_end(&mut reader, &mut body)
         .map_err(|e| SourceError::Other(format!("failed to read S3 object body: {key}: {e}")))?;
     if body.len() as u64 > MAX_S3_OBJECT_BYTES {

@@ -1,9 +1,9 @@
 //! GitHub organization source: clones and scans all repositories in a GitHub
 //! organization via the GitHub API.
 
-use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -222,6 +222,7 @@ fn wait_for_command_with_timeout(
 struct GitAskpassAuth {
     _dir: tempfile::TempDir,
     askpass_path: PathBuf,
+    #[allow(dead_code)]
     token_path: PathBuf,
 }
 
@@ -318,8 +319,8 @@ fn sanitize_git_error_message(stderr: &str) -> String {
     static AUTH_HEADER_RE: OnceLock<Option<Regex>> = OnceLock::new();
     static TOKEN_RE: OnceLock<Option<Regex>> = OnceLock::new();
 
-    let url_cred = URL_CRED_RE
-        .get_or_init(|| Regex::new(r"([a-z][a-z0-9+\-.]*://)([^/@\s]+)@").ok());
+    let url_cred =
+        URL_CRED_RE.get_or_init(|| Regex::new(r"([a-z][a-z0-9+\-.]*://)([^/@\s]+)@").ok());
     let auth_header = AUTH_HEADER_RE
         .get_or_init(|| Regex::new(r"(?i)(authorization:\s*(?:basic|bearer)\s+)\S+").ok());
     let token_pat = TOKEN_RE

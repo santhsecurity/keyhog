@@ -38,6 +38,50 @@ const INLINE_SUPPRESSION_DIRECTIVE: &str = "keyhog:ignore";
 const DETECTOR_DIRECTIVE_PREFIX: &str = "detector=";
 const INLINE_COMMENT_MARKERS: &[&str] = &["//", "#", "--", "/*", "<!--"];
 
+/// Amber gradient colors matching the website design (deep amber → light).
+const BANNER_COLORS: [(u8, u8, u8); 5] = [
+    (245, 158, 11),  // #F59E0B
+    (251, 191, 36),  // #FBBF24
+    (252, 211, 77),  // #FCD34D
+    (253, 230, 138), // #FDE68A
+    (254, 243, 199), // #FEF3C7
+];
+
+/// Banner line delay in milliseconds for the reveal animation.
+const BANNER_LINE_DELAY_MS: u64 = 40;
+
+const BANNER_LINES: [&str; 5] = [
+    "  ██   ██ ████████ ██    ██ ██   ██  ██████   ██████",
+    "  ██  ██  ██        ██  ██  ██   ██ ██    ██ ██",
+    "  █████   █████      ████   ███████ ██    ██ ██   ███",
+    "  ██  ██  ██          ██    ██   ██ ██    ██ ██    ██",
+    "  ██   ██ ████████    ██    ██   ██  ██████   ██████",
+];
+
+/// Print the animated amber-gradient KEYHOG banner to stderr when running
+/// interactively. No-ops when stderr is piped or redirected.
+fn print_banner(detector_count: usize) {
+    if !std::io::stderr().is_terminal() {
+        return;
+    }
+
+    eprintln!();
+    for (line, (r, g, b)) in BANNER_LINES.iter().zip(BANNER_COLORS.iter()) {
+        eprint!("\x1b[38;2;{r};{g};{b}m{line}\x1b[0m");
+        eprintln!();
+        std::thread::sleep(std::time::Duration::from_millis(BANNER_LINE_DELAY_MS));
+    }
+
+    let dim = "\x1b[38;2;100;100;100m";
+    let reset = "\x1b[0m";
+    eprintln!(
+        "{dim}  v{version} · Secret Scanner · {detector_count} detectors{reset}",
+        version = env!("CARGO_PKG_VERSION"),
+    );
+    eprintln!("{dim}  by SanthSecurity{reset}");
+    eprintln!();
+}
+
 #[derive(Clone)]
 struct DedupedMatch {
     detector_id: String,
@@ -332,6 +376,7 @@ fn find_config_file(start: Option<&std::path::Path>) -> Option<PathBuf> {
 
 /// Load and merge a `.keyhog.toml` config file into the parsed `ScanArgs`.
 /// CLI flags always take precedence over the config file.
+#[allow(clippy::collapsible_if, clippy::cmp_owned)]
 fn apply_config_file(args: &mut ScanArgs) {
     let config_path = find_config_file(args.path.as_deref());
 
@@ -391,7 +436,10 @@ fn apply_config_file(args: &mut ScanArgs) {
         // Only override when the CLI default "text" was not explicitly set.
         // Since we can't distinguish "user passed --format text" from the
         // default, we only apply for non-text values in the config.
-        if !matches!(args.format, OutputFormat::Json | OutputFormat::Jsonl | OutputFormat::Sarif) {
+        if !matches!(
+            args.format,
+            OutputFormat::Json | OutputFormat::Jsonl | OutputFormat::Sarif
+        ) {
             match format_str.to_ascii_lowercase().as_str() {
                 "json" => args.format = OutputFormat::Json,
                 "jsonl" => args.format = OutputFormat::Jsonl,
@@ -554,6 +602,9 @@ async fn main() -> ExitCode {
 async fn run_scan(mut args: ScanArgs) -> Result<ExitCode> {
     let start = Instant::now();
     apply_config_file(&mut args);
+    // Show banner early so the user sees it during detector loading.
+    // The detector count is populated after loading.
+    let show_banner = std::io::stderr().is_terminal();
     configure_threads(args.threads);
 
     let allowlist = load_allowlist(args.path.as_deref());
@@ -563,10 +614,7 @@ async fn run_scan(mut args: ScanArgs) -> Result<ExitCode> {
     let detectors = if let Some(cached) =
         keyhog_core::load_detector_cache(&cache_path, &args.detectors)
     {
-        tracing::debug!(
-            count = cached.len(),
-            "loaded detectors from cache"
-        );
+        tracing::debug!(count = cached.len(), "loaded detectors from cache");
         cached
     } else {
         let loaded = load_detectors(&args.detectors)
@@ -582,6 +630,9 @@ async fn run_scan(mut args: ScanArgs) -> Result<ExitCode> {
         }
         loaded
     };
+    if show_banner {
+        print_banner(detectors.len());
+    }
     let scanner = std::sync::Arc::new(
         CompiledScanner::compile(detectors.clone()).context("compiling scanner")?,
     );
@@ -829,11 +880,7 @@ fn dedup_matches(matches: Vec<RawMatch>, scope: &DedupScope) -> Vec<DedupedMatch
             // File-level dedup: same credential in same file = one finding, different files = separate
             DedupScope::File => {
                 let (d, c) = matched.deduplication_key();
-                let file = matched
-                    .location
-                    .file_path
-                    .as_deref()
-                    .unwrap_or("stdin");
+                let file = matched.location.file_path.as_deref().unwrap_or("stdin");
                 format!("{d}:{c}:{file}")
             }
             DedupScope::None => {
@@ -1325,7 +1372,10 @@ mod tests {
     #[cfg(feature = "full")]
     fn entropy_context_window_includes_neighboring_lines() {
         let text = "one\ntwo\nthree\nfour\nfive";
-        assert_eq!(super::entropy_context_window(text, 3, 1), "two\nthree\nfour");
+        assert_eq!(
+            super::entropy_context_window(text, 3, 1),
+            "two\nthree\nfour"
+        );
     }
 
     // =========================================================================

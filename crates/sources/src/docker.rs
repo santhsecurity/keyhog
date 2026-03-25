@@ -136,7 +136,9 @@ fn unpack_tar(archive_path: &Path, destination: &Path) -> Result<(), SourceError
     extract_archive.unpack(destination).map_err(SourceError::Io)
 }
 
-fn validate_extracted_tree<R: std::io::Read>(archive: &mut tar::Archive<R>) -> Result<(), SourceError> {
+fn validate_extracted_tree<R: std::io::Read>(
+    archive: &mut tar::Archive<R>,
+) -> Result<(), SourceError> {
     for entry in archive.entries().map_err(SourceError::Io)? {
         let entry = entry.map_err(SourceError::Io)?;
         let path = entry.path().map_err(SourceError::Io)?;
@@ -251,11 +253,7 @@ mod tests {
         let target_dir = tempdir.path().join("secure_dir");
         create_private_directory_all(&target_dir).unwrap();
 
-        let mode = std::fs::metadata(&target_dir)
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
+        let mode = std::fs::metadata(&target_dir).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o700);
     }
 

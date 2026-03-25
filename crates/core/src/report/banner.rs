@@ -108,8 +108,8 @@ fn pack_braille() -> Vec<Vec<(char, f32)>> {
         .map(|row| row.chars().map(|c| c == '#').collect())
         .collect();
 
-    let cell_rows = (grid.len() + 3) / 4; // each braille char is 4 dots tall
-    let cell_cols = KEYHOLE_COLS / 2;      // each braille char is 2 dots wide
+    let cell_rows = grid.len().div_ceil(4); // each braille char is 4 dots tall
+    let cell_cols = KEYHOLE_COLS / 2; // each braille char is 2 dots wide
 
     let mut result = Vec::with_capacity(cell_rows);
 
@@ -117,12 +117,12 @@ fn pack_braille() -> Vec<Vec<(char, f32)>> {
         let mut row = Vec::with_capacity(cell_cols);
         for cx in 0..cell_cols {
             let mut bits: u8 = 0;
-            for dy in 0..4 {
-                for dx in 0..2 {
+            for (dx, col) in DOT_MAP.iter().enumerate() {
+                for (dy, &dot) in col.iter().enumerate() {
                     let gy = cy * 4 + dy;
                     let gx = cx * 2 + dx;
                     if gy < grid.len() && gx < grid[gy].len() && grid[gy][gx] {
-                        bits |= DOT_MAP[dx][dy];
+                        bits |= dot;
                     }
                 }
             }
@@ -276,7 +276,11 @@ mod tests {
     fn braille_packing_produces_correct_dimensions() {
         let rows = pack_braille();
         // 24 dot-rows / 4 dots per braille row = 6 braille rows
-        assert_eq!(rows.len(), 6, "should produce 6 braille rows from 24 dot-rows");
+        assert_eq!(
+            rows.len(),
+            6,
+            "should produce 6 braille rows from 24 dot-rows"
+        );
         // 20 dot-cols / 2 dots per braille col = 10 braille cols
         for row in &rows {
             assert_eq!(row.len(), 10, "each braille row should have 10 columns");

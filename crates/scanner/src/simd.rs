@@ -6,7 +6,10 @@
 
 #[cfg(feature = "simd")]
 pub(crate) mod backend {
-    use hyperscan::{BlockDatabase, Builder, Pattern, Patterns, Scratch, Matching, PatternFlags, Block as BlockMode};
+    use hyperscan::{
+        Block as BlockMode, BlockDatabase, Builder, Matching, Pattern, PatternFlags, Patterns,
+        Scratch,
+    };
 
     /// Compiled Hyperscan database for all detector patterns.
     /// Thread-safe: the database is immutable and scratch is pooled per-instance.
@@ -15,6 +18,7 @@ pub(crate) mod backend {
         /// Map from HS pattern ID to (detector_index, pattern_index, has_group)
         pattern_map: Vec<(usize, usize, bool)>,
         /// Number of patterns that failed HS compilation
+        #[allow(dead_code)]
         pub unsupported_count: usize,
         /// Per-instance scratch pool (each scratch is tied to this db)
         scratch_pool: std::sync::Mutex<Vec<Scratch>>,
@@ -112,7 +116,10 @@ pub(crate) mod backend {
         /// Uses a scratch pool for thread-safety without per-call allocation.
         pub fn scan(&self, text: &[u8]) -> Vec<(usize, usize, usize)> {
             // Take scratch from instance pool, or allocate new one
-            let scratch = self.scratch_pool.lock().ok()
+            let scratch = self
+                .scratch_pool
+                .lock()
+                .ok()
                 .and_then(|mut p| p.pop())
                 .or_else(|| self.db.alloc_scratch().ok());
             let Some(scratch) = scratch else {

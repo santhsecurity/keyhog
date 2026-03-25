@@ -4,6 +4,7 @@ description = "Aho-Corasick + regex compiled scanner for credential detection"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [features]
 default = ["ml", "entropy", "decode", "multiline"]

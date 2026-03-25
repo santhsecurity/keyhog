@@ -8,12 +8,10 @@ pub(crate) fn extract_printable_strings(bytes: &[u8], min_len: usize) -> Vec<Str
     for &b in bytes {
         if b.is_ascii_graphic() || b == b' ' || b == b'\t' {
             current_string.push(b as char);
+        } else if current_string.len() >= min_len {
+            strings.push(std::mem::take(&mut current_string));
         } else {
-            if current_string.len() >= min_len {
-                strings.push(std::mem::take(&mut current_string));
-            } else {
-                current_string.clear();
-            }
+            current_string.clear();
         }
     }
     if current_string.len() >= min_len {

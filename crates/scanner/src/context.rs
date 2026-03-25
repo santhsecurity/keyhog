@@ -109,7 +109,8 @@ pub fn is_known_example_credential(credential: &str) -> bool {
         || credential == "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         || credential == "ghp_1234567890abcdefghij1234567890abcdef"
         || credential == "ghp_1234567890abcdefghij1234567890abcdefgh"
-        || credential == "github_pat_11AAAAAA0xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        || credential
+            == "github_pat_11AAAAAA0xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     {
         return true;
     }
@@ -209,7 +210,10 @@ fn is_sequential_placeholder(credential: &str) -> bool {
     // Check for repeating 2-char pattern (e.g., "5E5E5E5E")
     if bytes.len() >= 8 {
         let pair = &bytes[..2];
-        if bytes.chunks(2).all(|chunk| chunk == pair || chunk.len() < 2) {
+        if bytes
+            .chunks(2)
+            .all(|chunk| chunk == pair || chunk.len() < 2)
+        {
             return true;
         }
     }
@@ -247,19 +251,27 @@ fn is_hex_sequential_placeholder(credential: &str) -> bool {
 
     // Check if the first hex char of each pair follows an ascending pattern
     let first_chars: Vec<u8> = pairs.iter().map(|p| p[0].to_ascii_lowercase()).collect();
-    let ascending = first_chars.windows(2).filter(|w| {
-        w[1] == w[0] + 1 || (w[0] == b'f' && w[1] == b'a')
-            || (w[0] == b'9' && w[1] == b'a')
-            || (w[0] == b'9' && w[1] == b'0')
-    }).count();
+    let ascending = first_chars
+        .windows(2)
+        .filter(|w| {
+            w[1] == w[0] + 1
+                || (w[0] == b'f' && w[1] == b'a')
+                || (w[0] == b'9' && w[1] == b'a')
+                || (w[0] == b'9' && w[1] == b'0')
+        })
+        .count();
 
     // Or check second hex char ascending
     let second_chars: Vec<u8> = pairs.iter().map(|p| p[1].to_ascii_lowercase()).collect();
-    let ascending2 = second_chars.windows(2).filter(|w| {
-        w[1] == w[0] + 1 || (w[0] == b'f' && w[1] == b'0')
-            || (w[0] == b'9' && w[1] == b'0')
-            || (w[0] == b'9' && w[1] == b'a')
-    }).count();
+    let ascending2 = second_chars
+        .windows(2)
+        .filter(|w| {
+            w[1] == w[0] + 1
+                || (w[0] == b'f' && w[1] == b'0')
+                || (w[0] == b'9' && w[1] == b'0')
+                || (w[0] == b'9' && w[1] == b'a')
+        })
+        .count();
 
     // Require 75%+ ascending to avoid false-suppressing real hex hashes.
     // True placeholders like "a1b2c3d4e5f6..." score 90%+.
@@ -274,7 +286,11 @@ pub fn is_false_positive_context(lines: &[&str], line_idx: usize, file_path: Opt
 
 /// Same as `is_false_positive_context` but accepts a pre-lowered path to avoid
 /// re-allocating for every match in the same chunk.
-pub fn is_false_positive_context_with_path(lines: &[&str], line_idx: usize, path_lower: Option<&str>) -> bool {
+pub fn is_false_positive_context_with_path(
+    lines: &[&str],
+    line_idx: usize,
+    path_lower: Option<&str>,
+) -> bool {
     if line_idx >= lines.len() {
         return false;
     }
@@ -282,7 +298,7 @@ pub fn is_false_positive_context_with_path(lines: &[&str], line_idx: usize, path
     let line = lines[line_idx];
     let lower = line.to_ascii_lowercase();
 
-    is_go_sum_checksum(&lower, path_lower.as_deref())
+    is_go_sum_checksum(&lower, path_lower)
         || is_integrity_hash_context(lines, line_idx, &lower)
         || is_configmap_binary_data_context(lines, line_idx, &lower)
         || is_git_lfs_pointer_context_with_lines(lines, line_idx, &lower)
@@ -367,11 +383,19 @@ fn is_test_file(path: &str) -> bool {
     // Safe prefix/suffix checks — `starts_with` and `ends_with` never panic
     // on multi-byte UTF-8, unlike byte-index slicing.
     stem.eq_ignore_ascii_case("test")
-        || stem.len() > TEST_PREFIX_LEN && stem.as_bytes().get(..TEST_PREFIX_LEN).is_some_and(|b| b.eq_ignore_ascii_case(b"test_"))
-        || filename.ends_with("_test.go") || filename.ends_with("_test.rs")
-        || filename.ends_with("_test.py") || filename.ends_with("_test.rb")
-        || filename.ends_with(".test.js") || filename.ends_with(".test.ts")
-        || filename.ends_with(".spec.js") || filename.ends_with(".spec.ts")
+        || stem.len() > TEST_PREFIX_LEN
+            && stem
+                .as_bytes()
+                .get(..TEST_PREFIX_LEN)
+                .is_some_and(|b| b.eq_ignore_ascii_case(b"test_"))
+        || filename.ends_with("_test.go")
+        || filename.ends_with("_test.rs")
+        || filename.ends_with("_test.py")
+        || filename.ends_with("_test.rb")
+        || filename.ends_with(".test.js")
+        || filename.ends_with(".test.ts")
+        || filename.ends_with(".spec.js")
+        || filename.ends_with(".spec.ts")
         || path.split('/').any(|component| {
             component.eq_ignore_ascii_case("test")
                 || component.eq_ignore_ascii_case("tests")
@@ -383,7 +407,9 @@ fn is_test_file(path: &str) -> bool {
 }
 
 fn infer_default_context(trimmed: &str) -> CodeContext {
-    if memchr::memchr(b'"', trimmed.as_bytes()).is_some() || memchr::memchr(b'\'', trimmed.as_bytes()).is_some() {
+    if memchr::memchr(b'"', trimmed.as_bytes()).is_some()
+        || memchr::memchr(b'\'', trimmed.as_bytes()).is_some()
+    {
         CodeContext::StringLiteral
     } else {
         CodeContext::Unknown
@@ -391,7 +417,8 @@ fn infer_default_context(trimmed: &str) -> CodeContext {
 }
 
 fn is_go_sum_checksum(lower: &str, path_lower: Option<&str>) -> bool {
-    memchr::memmem::find(lower.as_bytes(), b"h1:").is_some() || path_lower.is_some_and(|path| path.ends_with(".sum"))
+    memchr::memmem::find(lower.as_bytes(), b"h1:").is_some()
+        || path_lower.is_some_and(|path| path.ends_with(".sum"))
 }
 
 fn is_integrity_hash_context(lines: &[&str], line_idx: usize, lower: &str) -> bool {
@@ -402,7 +429,9 @@ fn is_integrity_hash_context(lines: &[&str], line_idx: usize, lower: &str) -> bo
 }
 
 fn is_integrity_hash(lower: &str) -> bool {
-    memchr::memmem::find(lower.as_bytes(), b"integrity").is_some() && (memchr::memmem::find(lower.as_bytes(), b"sha256-").is_some() || memchr::memmem::find(lower.as_bytes(), b"sha512-").is_some())
+    memchr::memmem::find(lower.as_bytes(), b"integrity").is_some()
+        && (memchr::memmem::find(lower.as_bytes(), b"sha256-").is_some()
+            || memchr::memmem::find(lower.as_bytes(), b"sha512-").is_some())
 }
 
 fn is_configmap_binary_data_context(lines: &[&str], line_idx: usize, lower: &str) -> bool {
@@ -425,7 +454,8 @@ fn is_git_lfs_pointer_context_with_lines(lines: &[&str], line_idx: usize, lower:
 }
 
 fn is_git_lfs_pointer_context(lower: &str) -> bool {
-    memchr::memmem::find(lower.as_bytes(), b"oid sha256:").is_some() || memchr::memmem::find(lower.as_bytes(), b"git-lfs").is_some()
+    memchr::memmem::find(lower.as_bytes(), b"oid sha256:").is_some()
+        || memchr::memmem::find(lower.as_bytes(), b"git-lfs").is_some()
 }
 
 fn is_renovate_digest_context_with_lines(lines: &[&str], line_idx: usize, lower: &str) -> bool {
@@ -500,7 +530,7 @@ fn surrounding_lines_contain(
 
 fn surrounding_line_window(text: &str, offset: usize, radius: usize) -> String {
     let safe_offset = offset.min(text.len());
-    let line_idx = memchr::memchr_iter(b'\n', text[..safe_offset].as_bytes()).count();
+    let line_idx = memchr::memchr_iter(b'\n', &text.as_bytes()[..safe_offset]).count();
     let lines: Vec<&str> = text.lines().collect();
     if lines.is_empty() {
         return String::new();

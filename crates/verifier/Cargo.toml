@@ -4,6 +4,7 @@ description = "Async parallel credential verification engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [features]
 default = ["live"]

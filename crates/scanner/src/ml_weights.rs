@@ -8,7 +8,6 @@
 include!(concat!(env!("OUT_DIR"), "/model_version.rs"));
 
 const WEIGHTS: &[u8] = include_bytes!("weights.bin");
-/// Build date for the embedded ML model weights.
 
 const INPUT_DIM: usize = 41;
 const EXPERT_COUNT: usize = 6;
@@ -141,11 +140,20 @@ mod tests {
         assert!(!gate_weight().is_empty(), "gate weights empty");
         assert!(!gate_bias().is_empty(), "gate bias empty");
         for i in 0..EXPERT_COUNT {
-            assert!(!expert_fc1_weight(i).is_empty(), "expert {i} fc1 weights empty");
+            assert!(
+                !expert_fc1_weight(i).is_empty(),
+                "expert {i} fc1 weights empty"
+            );
             assert!(!expert_fc1_bias(i).is_empty(), "expert {i} fc1 bias empty");
-            assert!(!expert_fc2_weight(i).is_empty(), "expert {i} fc2 weights empty");
+            assert!(
+                !expert_fc2_weight(i).is_empty(),
+                "expert {i} fc2 weights empty"
+            );
             assert!(!expert_fc2_bias(i).is_empty(), "expert {i} fc2 bias empty");
-            assert!(!expert_fc3_weight(i).is_empty(), "expert {i} fc3 weights empty");
+            assert!(
+                !expert_fc3_weight(i).is_empty(),
+                "expert {i} fc3 weights empty"
+            );
             assert!(!expert_fc3_bias(i).is_empty(), "expert {i} fc3 bias empty");
         }
     }

@@ -4,6 +4,7 @@ description = "Pluggable input sources: filesystem, git history, stdin, s3"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [features]
 default = ["git"]
