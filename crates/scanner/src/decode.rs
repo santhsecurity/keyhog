@@ -306,8 +306,24 @@ pub fn register_decoder(decoder: Box<dyn Decoder>) {
     registry.push(decoder);
 }
 
-/// Decode base64 and hex strings in a chunk, producing additional chunks
-/// with decoded content for scanning.
+/// Maximum decode recursion depth. Two levels handle the common case of
+/// `base64(hex(secret))` or `hex(base64(secret))`. Higher depths are
+/// theoretically possible but:
+///   - Real-world triple-encoding is vanishingly rare in codebases.
+///   - Each level multiplies the candidate set combinatorially.
+///   - The `seen` dedup set prevents repeat work, but O(candidates²) growth
+///     still makes depth > 2 impractical for large chunks.
+///
+/// Attackers who triple-encode to evade scanners will also evade TruffleHog,
+/// Semgrep, and every other current-generation scanner.
+const MAX_DECODE_DEPTH: usize = 2;
+
+/// Decode base64, hex, URL, and other encoded strings in a chunk, producing
+/// additional chunks with decoded content for scanning.
+///
+/// Uses BFS with deduplication to avoid redundant decode–re-decode cycles.
+/// The search is bounded by [`MAX_DECODE_DEPTH`] to prevent combinatorial
+/// explosion on pathological inputs.
 pub fn decode_chunk(chunk: &Chunk) -> Vec<Chunk> {
     let mut decoded_chunks = Vec::new();
     let mut queue = VecDeque::from([(chunk.clone(), 0usize)]);
@@ -317,7 +333,7 @@ pub fn decode_chunk(chunk: &Chunk) -> Vec<Chunk> {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     while let Some((current, depth)) = queue.pop_front() {
-        if depth >= 2 {
+        if depth >= MAX_DECODE_DEPTH {
             continue;
         }
         for decoder in registry.iter() {

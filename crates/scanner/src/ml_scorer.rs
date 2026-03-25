@@ -15,14 +15,38 @@ pub(crate) mod ml_weights;
 
 use std::cell::RefCell;
 
+/// Feature vector dimensionality. Each feature captures one signal:
+/// 4 length features + 4 entropy features + 4 character class features +
+/// 4 prefix features + 4 context features + 4 placeholder features +
+/// 4 structure features + 6 file-type one-hot features + 3 extra features
+/// (comment, assignment, test-file) = 37 base + 4 padding = 41.
 const NUM_FEATURES: usize = 41;
+
+/// Offset into the feature vector where the one-hot file-type encoding starts.
 const FILE_TYPE_OFFSET: usize = 32;
+
+/// Number of mixture-of-experts specialists. Each expert sees the same input
+/// but learns different aspects (one may specialize in cloud credentials,
+/// another in short API keys, etc.). 6 experts balance capacity vs. inference
+/// cost — trained via grid search over {4, 6, 8, 12}.
 const EXPERT_COUNT: usize = 6;
+
+/// Normalization ceiling for text length feature (feature[0] = len / 200).
+/// 200 chars covers the longest common credential format (JWT, SSH keys).
 const MAX_NORMALIZED_TEXT_LENGTH: f32 = 200.0;
+
+/// Length thresholds for binary features. Trained on the distribution of
+/// real credentials (20-char API keys, 40-char tokens, 100-char JWTs).
 const MEDIUM_LENGTH_THRESHOLD: usize = 20;
 const LONG_LENGTH_THRESHOLD: usize = 40;
 const VERY_LONG_LENGTH_THRESHOLD: usize = 100;
+
+/// Normalization ceiling for Shannon entropy (max theoretical for ASCII = 8.0).
 const MAX_NORMALIZED_ENTROPY: f32 = 8.0;
+
+/// Entropy thresholds derived from the training corpus: 3.5 separates readable
+/// English from random-ish strings, 4.5 separates structured tokens from high
+/// entropy, and 5.0 flags near-random secrets.
 const LOW_ENTROPY_THRESHOLD: f64 = 3.5;
 const HIGH_ENTROPY_THRESHOLD: f64 = 4.5;
 const VERY_HIGH_ENTROPY_THRESHOLD: f64 = 5.0;

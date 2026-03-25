@@ -368,6 +368,28 @@ impl CompiledScanner {
         matches
     }
 
+    /// Split a large chunk into overlapping windows and scan each.
+    ///
+    /// # Window Layout
+    ///
+    /// ```text
+    /// ├────── MAX_SCAN_CHUNK (1 MiB) ──────┤
+    /// │ window 0                            │
+    /// │                     ├─ OVERLAP (4K) ┤
+    /// │                     │ window 1      │──── MAX_SCAN_CHUNK ────│
+    /// │                     │               │                       │
+    /// ```
+    ///
+    /// Windows advance by `MAX_SCAN_CHUNK - WINDOW_OVERLAP` bytes. The 4 KiB
+    /// overlap ensures secrets up to ~3,200 chars (PEM RSA-4096 base64) that
+    /// straddle a boundary are fully contained in at least one window.
+    ///
+    /// # Deduplication
+    ///
+    /// The `seen` set tracks `(credential, detector_id)` pairs across windows
+    /// so that a secret in the overlap region is only reported once. The set is
+    /// capped at [`MAX_WINDOW_DEDUP_ENTRIES`] and cleared on overflow to bound
+    /// memory for pathological inputs with millions of matches.
     fn scan_windowed(&self, chunk: &Chunk) -> Vec<RawMatch> {
         let chunk_text = &chunk.data;
         let mut all_matches = Vec::with_capacity((chunk_text.len() / 4096).max(16));
@@ -499,6 +521,14 @@ impl CompiledScanner {
         scan_state.matches
     }
 
+    /// Dispatch regex execution for a single compiled pattern against the
+    /// preprocessed text. Routes to either grouped extraction (when the
+    /// pattern has a capture group for the credential value) or plain
+    /// extraction (full-match mode).
+    ///
+    /// Matched credentials are appended to `matches` after confidence scoring
+    /// and false-positive filtering. The ML score cache is shared across
+    /// patterns to avoid redundant inference for the same credential string.
     #[allow(clippy::too_many_arguments)]
     fn extract_matches(
         &self,
@@ -919,6 +949,26 @@ impl CompiledScanner {
             .and_then(|companion| find_companion(preprocessed, line, companion))
     }
 
+    /// Compute the confidence score for a credential match.
+    ///
+    /// # Scoring Pipeline
+    ///
+    /// 1. **Heuristic signals** (`confidence::compute_confidence`): combines
+    ///    literal prefix presence, capture-group anchoring, Shannon entropy,
+    ///    keyword proximity, sensitive file paths, match length, and companion
+    ///    secret presence into a raw score in `[0.0, 1.0]`.
+    ///
+    /// 2. **Context adjustment**: the surrounding code context (test files,
+    ///    documentation, comments, example blocks) applies a multiplier that
+    ///    reduces confidence for matches in non-production contexts.
+    ///
+    /// 3. **ML blending** (when `feature = "ml"` is enabled): a 41-feature
+    ///    mixture-of-experts classifier produces an independent confidence
+    ///    score. The final output is `max(blended, heuristic, ml)` — we take
+    ///    the maximum so that a strong heuristic signal is never dragged down
+    ///    by a weak ML prediction, and vice versa.
+    ///
+    /// When ML is disabled, returns the heuristic confidence directly.
     #[allow(clippy::too_many_arguments)]
     fn match_confidence(
         &self,

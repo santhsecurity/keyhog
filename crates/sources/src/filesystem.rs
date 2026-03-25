@@ -204,12 +204,21 @@ fn read_file_mmap(path: &std::path::Path) -> Option<String> {
 
     let result = decode_text_file(&mmap);
 
-    // Release the advisory lock (also released automatically when file is dropped).
+    // Release the advisory lock explicitly rather than relying on fd close.
+    // The unlock is best-effort: failure is extremely unlikely (requires a
+    // corrupted fd) and the lock would be released on file drop regardless.
     #[cfg(unix)]
     {
         use std::os::unix::io::AsRawFd;
         let fd = file.as_raw_fd();
-        unsafe { libc::flock(fd, libc::LOCK_UN) };
+        let unlock_result = unsafe { libc::flock(fd, libc::LOCK_UN) };
+        if unlock_result != 0 {
+            tracing::trace!(
+                path = ?path,
+                errno = std::io::Error::last_os_error().raw_os_error(),
+                "advisory flock unlock failed (lock released on fd close)"
+            );
+        }
     }
 
     result

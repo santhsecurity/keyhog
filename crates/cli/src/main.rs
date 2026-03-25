@@ -672,13 +672,25 @@ async fn run_scan(mut args: ScanArgs) -> Result<ExitCode> {
     })
 }
 
+/// Configure the global rayon thread pool with the user-specified thread count.
+///
+/// # Limitation
+///
+/// `rayon::ThreadPoolBuilder::build_global()` can only succeed once per process.
+/// Subsequent calls (e.g., when `run_scan` is invoked multiple times in a test
+/// or library context) will fail. This is a known rayon design constraint — the
+/// global pool is immutable once initialized. The failure is logged at warn
+/// level but is non-fatal: rayon falls back to its default pool (num_cpus).
 fn configure_threads(threads: Option<usize>) {
     if let Some(n) = threads
         && let Err(error) = rayon::ThreadPoolBuilder::new()
             .num_threads(n)
             .build_global()
     {
-        tracing::warn!("failed to configure rayon thread pool with {n} threads: {error}");
+        tracing::warn!(
+            requested_threads = n,
+            "failed to configure rayon thread pool (may already be initialized): {error}"
+        );
     }
 }
 
@@ -798,8 +810,13 @@ fn scan_parallel(
         .collect::<Vec<_>>();
 
     if result.len() > MAX_TOTAL_FINDINGS {
+        // Sort by severity (Critical first) so truncation keeps the most
+        // important findings. Without sorting, rayon's parallel iteration
+        // order is non-deterministic — truncation would discard findings
+        // arbitrarily.
+        result.sort_by(|a, b| b.severity.cmp(&a.severity));
         tracing::warn!(
-            "findings truncated: {} found, keeping first {}",
+            "findings truncated: {} found, keeping top {} by severity",
             result.len(),
             MAX_TOTAL_FINDINGS
         );
