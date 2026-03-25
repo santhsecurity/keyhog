@@ -136,7 +136,7 @@ impl Source for FilesystemSource {
                 Some(text) if !text.is_empty() => (text, "filesystem"),
                 _ => {
                     // File couldn't be read as text — try binary string extraction
-                    if let Ok(bytes) = std::fs::read(path) {
+                    if let Ok(bytes) = read_file_safe(path) {
                         let strings = crate::strings::extract_printable_strings(&bytes, 8);
                         if strings.is_empty() {
                             return None;
@@ -162,17 +162,40 @@ impl Source for FilesystemSource {
     }
 }
 
-/// Read a small file using buffered I/O.
+/// Read a small file safely (preventing TOCTOU symlink attacks).
 fn read_file_buffered(path: &std::path::Path) -> Option<String> {
-    let bytes = std::fs::read(path).ok()?;
+    let bytes = read_file_safe(path).ok()?;
     decode_text_file(&bytes)
+}
+
+/// Safely open a file for reading, preventing symlink following.
+fn open_file_safe(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // O_NOFOLLOW prevents TOCTOU symlink read vulnerabilities.
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+
+    options.open(path)
+}
+
+/// Safely read a file into bytes, preventing symlink following.
+fn read_file_safe(path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+    let mut file = open_file_safe(path)?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut file, &mut bytes)?;
+    Ok(bytes)
 }
 
 /// Read a file using memory mapping for zero-copy access.
 fn read_file_mmap(path: &std::path::Path) -> Option<String> {
     use memmap2::MmapOptions;
 
-    let file = match std::fs::File::open(path) {
+    let file = match open_file_safe(path) {
         Ok(f) => f,
         Err(_) => return None,
     };

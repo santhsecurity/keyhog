@@ -743,6 +743,12 @@ fn collect_chunks(args: &ScanArgs) -> Result<Vec<keyhog_core::Chunk>> {
 /// Maximum total findings across all chunks to prevent unbounded memory growth.
 const MAX_TOTAL_FINDINGS: usize = 100_000;
 
+/// Per-chunk scan time budget. The `regex` crate guarantees O(n) matching
+/// (Thompson NFA, no backtracking), but multiline preprocessing, decode-through
+/// loops, and entropy scanning can still produce unbounded wall time on
+/// pathological content. Chunks exceeding this budget are skipped.
+const PER_CHUNK_SCAN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 fn scan_parallel(
     scanner: &std::sync::Arc<CompiledScanner>,
     chunks: &[keyhog_core::Chunk],
@@ -751,9 +757,12 @@ fn scan_parallel(
     show_progress: bool,
 ) -> Vec<RawMatch> {
     let progress = ScanProgress::new(chunks.len(), show_progress);
+    let timed_out_count = std::sync::atomic::AtomicUsize::new(0);
     let mut result: Vec<RawMatch> = chunks
         .par_iter()
         .flat_map(|chunk| {
+            let chunk_start = std::time::Instant::now();
+
             #[cfg(not(feature = "full"))]
             let _ = (do_decode, do_entropy);
 
@@ -761,10 +770,29 @@ fn scan_parallel(
             #[cfg(feature = "full")]
             let mut matches = matches;
 
+            // Check timeout after pattern scan
+            if chunk_start.elapsed() > PER_CHUNK_SCAN_TIMEOUT {
+                timed_out_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                tracing::warn!(
+                    path = ?chunk.metadata.path,
+                    elapsed = ?chunk_start.elapsed(),
+                    "chunk scan exceeded time budget, skipping decode/entropy"
+                );
+                progress.tick();
+                return matches;
+            }
+
             #[cfg(feature = "full")]
             if do_decode {
                 for decoded in decode::decode_chunk(chunk) {
                     matches.extend(scanner.scan(&decoded));
+                    if chunk_start.elapsed() > PER_CHUNK_SCAN_TIMEOUT {
+                        tracing::warn!(
+                            path = ?chunk.metadata.path,
+                            "chunk decode-through exceeded time budget"
+                        );
+                        break;
+                    }
                 }
             }
 
@@ -772,7 +800,7 @@ fn scan_parallel(
             let is_config = entropy::is_entropy_appropriate(chunk.metadata.path.as_deref());
 
             #[cfg(feature = "full")]
-            if do_entropy && is_config {
+            if do_entropy && is_config && chunk_start.elapsed() <= PER_CHUNK_SCAN_TIMEOUT {
                 for em in entropy::find_entropy_secrets(&chunk.data, 16, 2) {
                     let ml_context = entropy_context_window(&chunk.data, em.line, 2);
                     let ml_score = keyhog_scanner::ml_scorer::score(&em.value, &ml_context);
@@ -808,6 +836,11 @@ fn scan_parallel(
             matches
         })
         .collect::<Vec<_>>();
+
+    let timed_out = timed_out_count.load(std::sync::atomic::Ordering::Relaxed);
+    if timed_out > 0 {
+        tracing::warn!("{timed_out} chunk(s) exceeded the {PER_CHUNK_SCAN_TIMEOUT:?} scan budget");
+    }
 
     if result.len() > MAX_TOTAL_FINDINGS {
         // Sort by severity (Critical first) so truncation keeps the most

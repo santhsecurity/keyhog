@@ -1969,6 +1969,8 @@ dependencies = [
  "base64",
  "dashmap",
  "futures-util",
+ "hex",
+ "hmac",
  "keyhog-core",
  "percent-encoding",
  "reqwest",

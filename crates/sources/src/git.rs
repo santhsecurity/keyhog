@@ -7,8 +7,19 @@ use std::path::PathBuf;
 use gix::objs::Kind;
 use keyhog_core::{Chunk, ChunkMetadata, Source, SourceError};
 
+/// Maximum total in-memory bytes for all git blob content.
+/// 256 MiB covers large monorepos without OOM.
 const MAX_GIT_TOTAL_BYTES: usize = 256 * 1024 * 1024;
+
+/// Maximum size of a single git blob. Larger objects (binaries, vendor bundles)
+/// are skipped entirely — secrets almost never appear in 10+ MiB files.
 const MAX_GIT_BLOB_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Maximum number of chunks the git source can produce.
+/// Guards against repos with millions of tiny files where the byte limit alone
+/// wouldn't cap memory: each chunk carries ~200 bytes of metadata overhead,
+/// so 500K chunks × 200B = ~100 MB metadata ceiling.
+const MAX_GIT_CHUNKS: usize = 500_000;
 
 /// Scans git history: traverses commits and extracts text blob contents.
 pub struct GitSource {
@@ -64,10 +75,12 @@ fn collect_git_chunks(
     let mut chunks = Vec::new();
     let mut seen_blobs: HashSet<gix::ObjectId> = HashSet::new();
     let mut total_bytes = 0usize;
+    let mut chunk_count = 0usize;
     let mut traversal = BlobTraversal {
         seen_blobs: &mut seen_blobs,
         chunks: &mut chunks,
         total_bytes: &mut total_bytes,
+        chunk_count: &mut chunk_count,
     };
     for (count, info) in ancestors.enumerate() {
         if let Some(max) = max_commits
@@ -107,9 +120,13 @@ fn collect_git_chunks(
         collect_tree_blobs(&repo, &tree, &commit_id, &author, &mut traversal, b"");
         if *traversal.total_bytes >= MAX_GIT_TOTAL_BYTES {
             tracing::warn!(
-                "failed to continue git history scan: reached {} byte in-memory limit",
+                "git history scan: reached {} byte in-memory limit",
                 MAX_GIT_TOTAL_BYTES
             );
+            break;
+        }
+        if *traversal.chunk_count >= MAX_GIT_CHUNKS {
+            tracing::warn!("git history scan: reached {} chunk limit", MAX_GIT_CHUNKS);
             break;
         }
     }
@@ -121,6 +138,7 @@ struct BlobTraversal<'a> {
     seen_blobs: &'a mut HashSet<gix::ObjectId>,
     chunks: &'a mut Vec<Chunk>,
     total_bytes: &'a mut usize,
+    chunk_count: &'a mut usize,
 }
 
 fn collect_tree_blobs(
@@ -131,11 +149,12 @@ fn collect_tree_blobs(
     traversal: &mut BlobTraversal<'_>,
     prefix: &[u8],
 ) {
-    if *traversal.total_bytes >= MAX_GIT_TOTAL_BYTES {
+    if *traversal.total_bytes >= MAX_GIT_TOTAL_BYTES || *traversal.chunk_count >= MAX_GIT_CHUNKS {
         return;
     }
     for entry_ref in tree.iter() {
-        if *traversal.total_bytes >= MAX_GIT_TOTAL_BYTES {
+        if *traversal.total_bytes >= MAX_GIT_TOTAL_BYTES || *traversal.chunk_count >= MAX_GIT_CHUNKS
+        {
             return;
         }
         let entry = match entry_ref {
@@ -193,6 +212,7 @@ fn collect_tree_blobs(
 
         let path = String::from_utf8_lossy(&filepath).to_string();
         *traversal.total_bytes = traversal.total_bytes.saturating_add(file_text.len());
+        *traversal.chunk_count += 1;
 
         traversal.chunks.push(Chunk {
             data: file_text,

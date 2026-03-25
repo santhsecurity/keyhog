@@ -19,6 +19,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 percent-encoding = "2"
 sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
 base64 = "0.22"
 dashmap = "6.1.0"
 futures-util = "0.3"

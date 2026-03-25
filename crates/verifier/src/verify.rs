@@ -49,7 +49,6 @@ const TIMEOUT_ERROR: &str = "timeout";
 const PRIVATE_URL_ERROR: &str = "blocked: private URL";
 const HTTPS_ONLY_ERROR: &str = "blocked: HTTPS only";
 const MAX_RETRIES_EXCEEDED_ERROR: &str = "max retries exceeded";
-const AWS_STS_UNREACHABLE_ERROR: &str = "AWS STS unreachable";
 const AWS_VALID_ACCESS_KEY_PREFIXES: &[&str] = &["AKIA", "ASIA", "AROA", "AIDA", "AGPA"];
 const AWS_ACCESS_KEY_LEN: usize = 20;
 const AWS_MIN_SECRET_KEY_LEN: usize = 40;
@@ -191,12 +190,14 @@ async fn verify_group_task(shared: VerifyTaskShared, group: DedupedMatch) -> Ver
                     // SAFETY: lock ordering is one-way: task permits
                     // (global, then service) are acquired before touching
                     // inflight, and the DashMap entry guard is dropped before
-                    // await. We never hold a cache/inflight lock across
-                    // notify.notified().await, so waiters cannot form a cycle
-                    // with the owner that later removes the inflight entry in
-                    // InflightGuard::drop and wakes them.
+                    // await.
+                    // CRITICAL: We MUST create the `Notified` future before dropping `entry`.
+                    // This registers our interest synchronously. If we drop `entry` first,
+                    // the verifying task could remove it and call `notify_waiters()` before
+                    // we create the future, causing a permanent hang (lost wake-up).
+                    let fut = notify.notified();
                     drop(entry);
-                    notify.notified().await;
+                    fut.await;
                 }
                 dashmap::mapref::entry::Entry::Vacant(entry) => {
                     let notify = Arc::new(Notify::new());
@@ -541,17 +542,18 @@ async fn apply_auth(
     }
 }
 
-/// Build an AWS verification probe.
+/// Build and execute an AWS SigV4-signed `GetCallerIdentity` request.
 ///
-/// # Limitation — Format-Only Validation
+/// This performs real authentication against the AWS STS endpoint:
+/// - Constructs a canonical request per AWS Signature Version 4
+/// - Signs with the provided secret key using HMAC-SHA256
+/// - Returns `Live` if STS responds 200, `Dead` on 403
 ///
-/// AWS SigV4 signing is not implemented. This probe validates the *format* of
-/// the access key and secret key (prefix, length, character set) and confirms
-/// that the regional STS endpoint is reachable, but it **does not authenticate**
-/// the credential. All well-formatted keys are returned as `Unverifiable`.
+/// # Security
 ///
-/// Full SigV4 verification requires adding an AWS signing dependency (e.g.
-/// `aws-sigv4`) and constructing a signed `GetCallerIdentity` request.
+/// - Only contacts `sts.<region>.amazonaws.com` over HTTPS
+/// - The secret key is used only for HMAC signing and never transmitted
+/// - No data mutation: `GetCallerIdentity` is a read-only STS action
 async fn build_aws_probe(
     access_key: &str,
     secret_key: &str,
@@ -575,21 +577,190 @@ async fn build_aws_probe(
         );
     }
 
-    let probe_url =
-        format!("https://sts.{region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15");
+    let host = format!("sts.{region}.amazonaws.com");
+    let url = format!("https://{host}/");
+    let body = "Action=GetCallerIdentity&Version=2011-06-15";
 
-    RequestBuildResult::Final(
-        probe_aws_endpoint(client, &probe_url, timeout).await,
-        HashMap::from([
-            ("format_valid".into(), "true".into()),
-            (
-                "verification_note".into(),
-                "format-only: aws sigv4 signing not implemented".into(),
-            ),
-        ]),
+    // Build SigV4 signed request
+    match build_sigv4_request(
+        client,
+        &url,
+        &host,
+        body,
+        &access_key,
+        &secret_key,
+        region,
+        "sts",
+        timeout,
     )
+    .await
+    {
+        Ok((result, metadata)) => RequestBuildResult::Final(result, metadata),
+        Err(error_msg) => RequestBuildResult::Final(
+            VerificationResult::Error(error_msg),
+            HashMap::from([("format_valid".into(), "true".into())]),
+        ),
+    }
 }
 
+/// Construct and send an AWS SigV4-signed HTTP POST request.
+#[allow(clippy::too_many_arguments)]
+async fn build_sigv4_request(
+    client: &Client,
+    url: &str,
+    host: &str,
+    body: &str,
+    access_key: &str,
+    secret_key: &str,
+    region: &str,
+    service: &str,
+    timeout: Duration,
+) -> Result<(VerificationResult, HashMap<String, String>), String> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    let now = chrono_lite_now();
+    let datestamp = &now[..8]; // YYYYMMDD
+    let amz_date = &now; // YYYYMMDDTHHMMSSZ
+
+    // Step 1: Create canonical request
+    let payload_hash = hex_sha256(body.as_bytes());
+    let canonical_headers = format!(
+        "content-type:application/x-www-form-urlencoded\nhost:{host}\nx-amz-date:{amz_date}\n"
+    );
+    let signed_headers = "content-type;host;x-amz-date";
+    let canonical_request =
+        format!("POST\n/\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}");
+
+    // Step 2: Create string to sign
+    let credential_scope = format!("{datestamp}/{region}/{service}/aws4_request");
+    let canonical_request_hash = hex_sha256(canonical_request.as_bytes());
+    let string_to_sign =
+        format!("AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{canonical_request_hash}");
+
+    // Step 3: Calculate signature
+    let signing_key = derive_signing_key(secret_key, datestamp, region, service);
+    let signature = {
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(&signing_key).map_err(|_| AWS_SIGNING_ERROR)?;
+        mac.update(string_to_sign.as_bytes());
+        hex::encode(mac.finalize().into_bytes())
+    };
+
+    // Step 4: Build Authorization header
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
+    );
+
+    // Send the signed request
+    let response = client
+        .post(url)
+        .timeout(timeout)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Host", host)
+        .header("X-Amz-Date", amz_date)
+        .header("Authorization", &authorization)
+        .body(body.to_string())
+        .send()
+        .await
+        .map_err(|_| AWS_STS_UNREACHABLE_ERROR)?;
+
+    let status = response.status().as_u16();
+    let response_body = response.text().await.unwrap_or_default();
+
+    let mut metadata = HashMap::from([("format_valid".into(), "true".into())]);
+
+    let result = match status {
+        200 => {
+            // Parse GetCallerIdentity response for account info
+            if let Some(account) = extract_xml_field(&response_body, "Account") {
+                metadata.insert("aws_account".into(), account);
+            }
+            if let Some(arn) = extract_xml_field(&response_body, "Arn") {
+                metadata.insert("aws_arn".into(), arn);
+            }
+            VerificationResult::Live
+        }
+        403 => VerificationResult::Dead,
+        429 => VerificationResult::RateLimited,
+        _ => VerificationResult::Error(format!("unexpected STS response status: {status}")),
+    };
+
+    Ok((result, metadata))
+}
+
+/// Derive the SigV4 signing key: HMAC(HMAC(HMAC(HMAC("AWS4"+secret, date), region), service), "aws4_request")
+fn derive_signing_key(secret_key: &str, datestamp: &str, region: &str, service: &str) -> Vec<u8> {
+    let k_secret = format!("AWS4{secret_key}");
+    let k_date = hmac_sha256(k_secret.as_bytes(), datestamp.as_bytes());
+    let k_region = hmac_sha256(&k_date, region.as_bytes());
+    let k_service = hmac_sha256(&k_region, service.as_bytes());
+    hmac_sha256(&k_service, b"aws4_request")
+}
+
+/// Compute HMAC-SHA256.
+fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key length");
+    mac.update(data);
+    mac.finalize().into_bytes().to_vec()
+}
+
+/// Compute hex-encoded SHA-256 digest.
+fn hex_sha256(data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(data);
+    hex::encode(hash)
+}
+
+/// Generate a UTC timestamp in AWS format: YYYYMMDDTHHMMSSZ.
+/// Avoids pulling in the `chrono` crate by using `SystemTime`.
+fn chrono_lite_now() -> String {
+    use std::time::SystemTime;
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("system clock is before epoch");
+    let secs = now.as_secs();
+    // Break epoch seconds into date/time components
+    let days = secs / 86400;
+    let time_of_day = secs % 86400;
+    let hours = time_of_day / 3600;
+    let minutes = (time_of_day % 3600) / 60;
+    let seconds = time_of_day % 60;
+
+    // Civil date from days since epoch (simplified Rata Die algorithm)
+    let (year, month, day) = civil_from_days(days as i64);
+    format!("{year:04}{month:02}{day:02}T{hours:02}{minutes:02}{seconds:02}Z")
+}
+
+/// Convert days since Unix epoch to (year, month, day).
+/// Algorithm from Howard Hinnant's date algorithms.
+fn civil_from_days(days: i64) -> (i32, u32, u32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as i32, m, d)
+}
+
+/// Extract a simple XML field value: `<Tag>value</Tag>`.
+fn extract_xml_field(xml: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = xml.find(&open)? + open.len();
+    let end = xml[start..].find(&close)? + start;
+    Some(xml[start..end].to_string())
+}
+
+/// Validate that the access key and secret key have valid AWS format.
 fn valid_aws_format(access_key: &str, secret_key: &str) -> bool {
     AWS_VALID_ACCESS_KEY_PREFIXES
         .iter()
@@ -601,17 +772,8 @@ fn valid_aws_format(access_key: &str, secret_key: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '/' | '='))
 }
 
-async fn probe_aws_endpoint(
-    client: &Client,
-    probe_url: &str,
-    timeout: Duration,
-) -> VerificationResult {
-    match client.get(probe_url).timeout(timeout).send().await {
-        Ok(resp) if resp.status().as_u16() == 403 => VerificationResult::Unverifiable,
-        Ok(_) => VerificationResult::Unverifiable,
-        Err(_) => VerificationResult::Error(AWS_STS_UNREACHABLE_ERROR.into()),
-    }
-}
+const AWS_SIGNING_ERROR: &str = "failed to create HMAC signing key";
+const AWS_STS_UNREACHABLE_ERROR: &str = "aws sts endpoint unreachable";
 
 struct VerificationFailure {
     result: VerificationResult,
@@ -1108,19 +1270,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn aws_probe_does_not_block_inside_runtime() {
+    async fn aws_sigv4_probe_fails_on_unreachable_endpoint() {
         let client = Client::new();
-        let probe_result = probe_aws_endpoint(
+        let result = build_sigv4_request(
             &client,
-            "http://127.0.0.1:1/should-fail-fast",
+            "https://127.0.0.1:1/",
+            "127.0.0.1:1",
+            "Action=GetCallerIdentity&Version=2011-06-15",
+            "AKIAIOSFODNN7EXAMPLE",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            "us-east-1",
+            "sts",
             Duration::from_millis(50),
         )
         .await;
 
-        assert!(matches!(
-            probe_result,
-            VerificationResult::Error(message) if message == AWS_STS_UNREACHABLE_ERROR
-        ));
+        assert!(result.is_err(), "should fail on unreachable endpoint");
+    }
+
+    #[test]
+    fn aws_sigv4_signing_key_derivation_is_deterministic() {
+        let key1 = derive_signing_key("secret", "20260325", "us-east-1", "sts");
+        let key2 = derive_signing_key("secret", "20260325", "us-east-1", "sts");
+        assert_eq!(key1, key2, "signing key must be deterministic");
+        assert_eq!(key1.len(), 32, "HMAC-SHA256 output is 32 bytes");
+    }
+
+    #[test]
+    fn chrono_lite_now_produces_valid_format() {
+        let timestamp = chrono_lite_now();
+        assert_eq!(timestamp.len(), 16, "YYYYMMDDTHHMMSSZ = 16 chars");
+        assert!(timestamp.ends_with('Z'));
+        assert!(timestamp.contains('T'));
     }
 
     // =========================================================================

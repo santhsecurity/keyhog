@@ -493,13 +493,22 @@ fn extract_string_content(line: &str) -> String {
 }
 
 /// Extract content between matching quotes.
+///
+/// Handles Python f-string interpolation `{expr}` by skipping the
+/// interpolated expression and preserving the literal fragments.
+/// This ensures `f"sk-{prefix}abcdef123"` extracts `sk-abcdef123`.
 fn extract_quoted_content(s: &str, open: char, close: char) -> Option<String> {
     let mut chars = s.chars().peekable();
 
-    // Skip leading non-quote characters (like variable names, operators)
+    // Skip leading non-quote characters (like variable names, operators,
+    // or f-string prefixes like `f`, `r`, `b`, `rf`, `br`)
+    let mut is_fstring = false;
     while let Some(&ch) = chars.peek() {
         if ch == open {
             break;
+        }
+        if ch == 'f' || ch == 'F' {
+            is_fstring = true;
         }
         chars.next();
     }
@@ -512,7 +521,7 @@ fn extract_quoted_content(s: &str, open: char, close: char) -> Option<String> {
     let mut content = String::new();
     let mut escaped = false;
 
-    for ch in chars {
+    while let Some(ch) = chars.next() {
         if escaped {
             content.push(ch);
             escaped = false;
@@ -521,6 +530,20 @@ fn extract_quoted_content(s: &str, open: char, close: char) -> Option<String> {
             content.push(ch);
         } else if ch == close {
             return Some(content);
+        } else if is_fstring && ch == '{' && chars.peek() != Some(&'{') {
+            // Skip f-string interpolation `{expr}`, preserving surrounding literals.
+            // Double-brace `{{` is a literal `{` in f-strings, not interpolation.
+            let mut brace_depth = 1;
+            for c in chars.by_ref() {
+                if c == '{' {
+                    brace_depth += 1;
+                } else if c == '}' {
+                    brace_depth -= 1;
+                    if brace_depth == 0 {
+                        break;
+                    }
+                }
+            }
         } else {
             content.push(ch);
         }
@@ -945,5 +968,46 @@ mod tests {
         assert!(preprocessed.text.contains("xoxb-1234567890-"));
         assert!(preprocessed.text.contains("1234567890-"));
         assert!(preprocessed.text.contains("abcdefghijABCDEFGHIJklmn"));
+    }
+
+    #[test]
+    fn test_python_fstring_interpolation() {
+        // Python f-string: interpolation should be skipped, literal parts preserved
+        let text = r#"key = f"sk-proj-{prefix}abcdef123456""#;
+        let content = extract_quoted_content(r#"f"sk-proj-{prefix}abcdef123456""#, '"', '"');
+        assert_eq!(
+            content.as_deref(),
+            Some("sk-proj-abcdef123456"),
+            "f-string interpolation should be stripped, literals preserved"
+        );
+
+        let config = MultilineConfig::default();
+        let preprocessed = preprocess_multiline(text, &config);
+        // The original text should still be present
+        assert!(preprocessed.text.contains("sk-proj-"));
+    }
+
+    #[test]
+    fn test_python_fstring_multiline_concat() {
+        // f-string split with + operator
+        let text = r#"key = f"sk-proj-" + \
+    f"{org_id}abcdef123456""#;
+
+        let config = MultilineConfig::default();
+        let preprocessed = preprocess_multiline(text, &config);
+
+        assert!(preprocessed.text.contains("sk-proj-"));
+        assert!(preprocessed.text.contains("abcdef123456"));
+    }
+
+    #[test]
+    fn test_go_raw_literal_via_backtick() {
+        // Go raw string literals use backticks — handled by template literal extractor
+        let text = "apiKey := `sk-live-abcdef123456`";
+
+        let config = MultilineConfig::default();
+        let preprocessed = preprocess_multiline(text, &config);
+
+        assert!(preprocessed.text.contains("sk-live-abcdef123456"));
     }
 }
