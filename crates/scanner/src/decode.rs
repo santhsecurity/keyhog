@@ -29,22 +29,44 @@ impl Decoder for Base64Decoder {
                 continue;
             }
             for b64_match in find_base64_strings(line, 20) {
-                if let Ok(decoded) = base64_decode(&b64_match.value)
-                    && let Ok(text) = String::from_utf8(decoded)
-                    && text
-                        .chars()
-                        .all(|c| !c.is_control() || c == '\n' || c == '\r' || c == '\t')
-                {
-                    decoded_chunks.push(Chunk {
-                        data: text,
-                        metadata: ChunkMetadata {
-                            source_type: format!("{}/base64", chunk.metadata.source_type),
-                            path: chunk.metadata.path.clone(),
-                            commit: chunk.metadata.commit.clone(),
-                            author: chunk.metadata.author.clone(),
-                            date: chunk.metadata.date.clone(),
-                        },
-                    });
+                match base64_decode(&b64_match.value) {
+                    Ok(decoded) => match String::from_utf8(decoded) {
+                        Ok(text)
+                            if text.chars().all(|c| {
+                                !c.is_control() || c == '\n' || c == '\r' || c == '\t'
+                            }) =>
+                        {
+                            decoded_chunks.push(Chunk {
+                                data: text,
+                                metadata: ChunkMetadata {
+                                    source_type: format!("{}/base64", chunk.metadata.source_type),
+                                    path: chunk.metadata.path.clone(),
+                                    commit: chunk.metadata.commit.clone(),
+                                    author: chunk.metadata.author.clone(),
+                                    date: chunk.metadata.date.clone(),
+                                },
+                            });
+                        }
+                        Ok(_) => {
+                            tracing::trace!(
+                                path = ?chunk.metadata.path,
+                                "base64 decoded to text with control characters, skipping"
+                            );
+                        }
+                        Err(_) => {
+                            tracing::trace!(
+                                path = ?chunk.metadata.path,
+                                "base64 decoded to non-UTF-8 bytes, skipping"
+                            );
+                        }
+                    },
+                    Err(()) => {
+                        tracing::trace!(
+                            path = ?chunk.metadata.path,
+                            candidate_len = b64_match.value.len(),
+                            "base64 decode failed for candidate"
+                        );
+                    }
                 }
             }
         }

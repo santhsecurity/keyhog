@@ -42,15 +42,17 @@ impl Source for DockerImageSource {
 fn collect_docker_chunks(image: &str) -> Result<Vec<Chunk>, SourceError> {
     let image = validate_image_name(image)?;
     let tempdir = tempfile::tempdir().map_err(SourceError::Io)?;
-    let archive_path = tempfile::Builder::new()
+    // Store the temp path in a binding so RAII deletes the archive on scope exit
+    // (including panics). The old `.keep()` call disabled auto-cleanup — a crash
+    // after `docker image save` would leak multi-gigabyte tar files in /tmp.
+    let archive_temppath = tempfile::Builder::new()
         .prefix("keyhog-image-")
         .suffix(".tar")
         .rand_bytes(8)
         .tempfile_in(tempdir.path())
         .map_err(SourceError::Io)?
-        .into_temp_path()
-        .keep()
-        .map_err(|e| SourceError::Io(e.error))?;
+        .into_temp_path();
+    let archive_path = archive_temppath.to_path_buf();
     let root_path = tempdir.path().join("root");
     create_private_directory_all(&root_path)?;
 

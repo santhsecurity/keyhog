@@ -17,6 +17,12 @@ pub fn save_detector_cache(
 }
 
 /// Load detectors from a JSON cache file. Returns None if cache is stale or missing.
+///
+/// # Security
+///
+/// Cached detectors are re-validated through the quality gate to prevent cache
+/// poisoning attacks where a malicious `.keyhog-cache.json` injects evil regex
+/// patterns that bypass the TOML quality gate.
 pub fn load_detector_cache(cache_path: &Path, source_dir: &Path) -> Option<Vec<DetectorSpec>> {
     let cache_meta = std::fs::metadata(cache_path).ok()?;
     let cache_mtime = cache_meta.modified().ok()?;
@@ -37,7 +43,32 @@ pub fn load_detector_cache(cache_path: &Path, source_dir: &Path) -> Option<Vec<D
     }
 
     let data = std::fs::read(cache_path).ok()?;
-    serde_json::from_slice(&data).ok()
+    let detectors: Vec<DetectorSpec> = serde_json::from_slice(&data).ok()?;
+
+    // Re-validate cached detectors to prevent cache poisoning.
+    let validated: Vec<DetectorSpec> = detectors
+        .into_iter()
+        .filter(|spec| {
+            let issues = validate_detector(spec);
+            let has_errors = issues
+                .iter()
+                .any(|issue| matches!(issue, QualityIssue::Error(_)));
+            if has_errors {
+                tracing::warn!(
+                    "cached detector '{}' failed quality gate, discarding",
+                    spec.id
+                );
+            }
+            !has_errors
+        })
+        .collect();
+
+    if validated.is_empty() {
+        tracing::warn!("all cached detectors failed validation, falling back to TOML load");
+        return None;
+    }
+
+    Some(validated)
 }
 
 /// Load all detector specs from a directory of TOML files.

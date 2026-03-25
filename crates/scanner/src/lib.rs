@@ -58,21 +58,54 @@ use unicode_normalization::UnicodeNormalization;
 // beyond 10 KB. Prefixless regexes over larger blobs are expensive and secrets
 // are short enough that line-local scanning preserves recall.
 const LARGE_FALLBACK_SCAN_THRESHOLD: usize = 10_000;
+
+/// Hard cap on the dedup set to prevent unbounded memory growth when scanning
+/// repositories with millions of duplicate credential-like strings.
 const MAX_WINDOW_DEDUP_ENTRIES: usize = 100_000;
 const EMPTY_AC_PATTERNS: &[String] = &[];
+
+/// Maximum bytes scanned in a single chunk. Files larger than this are split
+/// into overlapping windows. 1 MiB keeps peak RSS predictable under parallel
+/// scanning with `rayon` (N threads × 1 MiB per chunk = bounded memory).
 const MAX_SCAN_CHUNK_BYTES: usize = 1024 * 1024;
+
+/// Overlap between adjacent scan windows when a file exceeds
+/// `MAX_SCAN_CHUNK_BYTES`. Must be larger than the longest secret the scanner
+/// can detect to avoid missing secrets that straddle a chunk boundary. 4 KiB
+/// covers PEM-encoded RSA-4096 keys (~3,200 chars base64) with margin.
 const WINDOW_OVERLAP_BYTES: usize = 4096;
+
+/// Minimum line length considered for fallback pattern scanning. Lines shorter
+/// than 8 bytes cannot contain a credential prefix plus a meaningful secret.
 const MIN_FALLBACK_LINE_LENGTH: usize = 8;
+
 /// Minimum AC literal prefix length. Shorter prefixes (e.g., "1", "x", "_")
+/// match too many positions and degrade Aho-Corasick throughput.
 const FIRST_CAPTURE_GROUP_INDEX: usize = 0;
 const FIRST_LINE_NUMBER: usize = 1;
 const PREVIOUS_LINE_DISTANCE: usize = 1;
 const MIN_LITERAL_PREFIX_CHARS: usize = 3;
+
+/// Compiled regex AST size limit. 10 MiB is large enough for complex detectors
+/// while preventing pathological patterns from consuming unbounded memory
+/// during regex compilation.
 const REGEX_SIZE_LIMIT_BYTES: usize = 10 << 20;
+
+/// How many characters around a hex match to inspect for structural context
+/// (assignment operators, quotes, keywords).
 const HEX_CONTEXT_RADIUS_CHARS: usize = 20;
+
+/// Minimum length for a standalone hex string to qualify as a potential secret.
+/// Shorter hex runs (e.g., CSS colors like `#ff00ff`) are too common.
 const MIN_HEX_MATCH_LEN: usize = 16;
 const MIN_HEX_DIGITS_IN_MATCH: usize = 16;
+
+/// Minimum hex digits required in the context window around a match to trigger
+/// hex-aware false-positive suppression.
 const MIN_HEX_CONTEXT_DIGITS: usize = 8;
+
+/// Maximum non-hex separators (colons, dashes) tolerated within a hex context
+/// window before the match is treated as a non-hex string.
 const MAX_HEX_CONTEXT_SEPARATORS: usize = 4;
 
 #[cfg(feature = "ml")]
