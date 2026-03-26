@@ -13,8 +13,12 @@ default-members = ["crates/cli"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "A high-performance secret scanner"
-repository = "https://github.com/Santh/keyhog"
+description = "A high-performance secret scanner — detect API keys, tokens, passwords, and credentials in code, git history, and archives"
+readme = "README.md"
+repository = "https://github.com/santhsecurity/keyhog"
+keywords = ["secret-scanner", "security", "credentials", "api-keys", "git"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["CORUM COLLECTIVE LLC"]
 
 [workspace.dependencies]
 keyhog-core = { path = "crates/core" }
