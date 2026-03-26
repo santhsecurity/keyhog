@@ -65,11 +65,12 @@ impl Source for FilesystemSource {
 
     fn chunks(&self) -> Box<dyn Iterator<Item = Result<Chunk, SourceError>> + '_> {
         let max_size = self.max_file_size;
-        let walker = CodeWalker::new(&self.root, walker_config(self.max_file_size))
-            .walk()
-            .into_iter();
+        let entries = match CodeWalker::new(&self.root, walker_config(self.max_file_size)).walk() {
+            Ok(entries) => entries,
+            Err(error) => return Box::new(std::iter::once(Err(SourceError::Io(error)))),
+        };
 
-        Box::new(walker.filter_map(move |entry| {
+        Box::new(entries.into_iter().filter_map(move |entry| {
             let path = entry.path;
             let file_size = entry.size;
 

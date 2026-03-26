@@ -1586,13 +1586,19 @@ mod tests {
     indicator_case!(indicator_invalid_token_detected, "invalid_token");
     indicator_case!(indicator_invalid_key_detected, "invalid_key");
     indicator_case!(indicator_invalid_api_key_detected, "invalid_api_key");
-    indicator_case!(indicator_authentication_error_detected, "authentication_error");
+    indicator_case!(
+        indicator_authentication_error_detected,
+        "authentication_error"
+    );
     indicator_case!(indicator_auth_error_detected, "auth_error");
     indicator_case!(indicator_unauthenticated_detected, "unauthenticated");
     indicator_case!(indicator_not_authenticated_detected, "not_authenticated");
     indicator_case!(indicator_access_denied_detected, "access_denied");
     indicator_case!(indicator_permission_denied_detected, "permission_denied");
-    indicator_case!(indicator_invalid_credentials_detected, "invalid_credentials");
+    indicator_case!(
+        indicator_invalid_credentials_detected,
+        "invalid_credentials"
+    );
     indicator_case!(indicator_bad_credentials_detected, "bad_credentials");
     indicator_case!(indicator_expired_detected, "expired");
     indicator_case!(indicator_token_expired_detected, "token_expired");

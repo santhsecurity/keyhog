@@ -143,6 +143,51 @@ fn glob_match_segments(pattern: &[&str], path: &[&str]) -> bool {
 }
 
 fn segment_match(pattern: &str, text: &str) -> bool {
+    if pattern.is_ascii() && text.is_ascii() {
+        return segment_match_ascii(pattern.as_bytes(), text.as_bytes());
+    }
+
+    segment_match_chars(pattern, text)
+}
+
+fn segment_match_ascii(pattern: &[u8], text: &[u8]) -> bool {
+    let mut pi = 0usize;
+    let mut ti = 0usize;
+    let mut star_pi = None;
+    let mut star_ti = 0usize;
+
+    while ti < text.len() {
+        if pi < pattern.len() && pattern[pi] == b'*' {
+            star_pi = Some(pi);
+            star_ti = ti;
+            pi += 1;
+            continue;
+        }
+
+        if pi < pattern.len() && pattern[pi] == text[ti] {
+            pi += 1;
+            ti += 1;
+            continue;
+        }
+
+        if let Some(star) = star_pi {
+            star_ti += 1;
+            ti = star_ti;
+            pi = star + 1;
+            continue;
+        }
+
+        return false;
+    }
+
+    while pi < pattern.len() && pattern[pi] == b'*' {
+        pi += 1;
+    }
+
+    pi == pattern.len()
+}
+
+fn segment_match_chars(pattern: &str, text: &str) -> bool {
     let pattern_chars: Vec<char> = pattern.chars().collect();
     let text_chars: Vec<char> = text.chars().collect();
 
@@ -250,6 +295,14 @@ path:*.example
         assert!(glob_match("*.example", "config.example"));
         assert!(glob_match("**/*.md", "docs/README.md"));
         assert!(!glob_match("tests/**", "src/main.rs"));
+    }
+
+    #[test]
+    fn glob_matching_handles_non_ascii_segments() {
+        assert!(glob_match("fixtures/*", "fixtures/caf\u{00e9}.rs"));
+        assert!(segment_match("caf*", "cafe"));
+        assert!(segment_match("caf*", "cafeteria"));
+        assert!(!segment_match("caf*", "tea"));
     }
 
     #[test]

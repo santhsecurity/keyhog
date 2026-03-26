@@ -16,8 +16,8 @@ description = "Lepton AI API token from environment variable"
 group = 1
 
 [[detector.patterns]]
-regex = "(?:token[=:\\s\"\\']+)([a-zA-Z0-9_-]{20,}).*lepton\\.(ai|run)"
-description = "Lepton token with endpoint context"
+regex = "(?:lepton\\.(?:ai|run).{0,120}\\btoken|\\btoken.{0,120}lepton\\.(?:ai|run)|LEPTON(?:AI)?[_-]?(?:API[_-]?)?TOKEN)[=:\\s\"\\']+([a-zA-Z0-9_-]{20,})"
+description = "Lepton token with Lepton-specific domain or variable context"
 group = 1
 
 [detector.verify]

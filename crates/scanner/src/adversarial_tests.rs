@@ -27,7 +27,9 @@ fn assert_detected(data: &str) {
     let chunk = make_chunk(data);
     let matches = scanner.scan(&chunk);
     assert!(
-        matches.iter().any(|matched| matched.credential == VALID_CREDENTIAL),
+        matches
+            .iter()
+            .any(|matched| matched.credential == VALID_CREDENTIAL),
         "expected credential to be detected in: {data}"
     );
 }
@@ -156,18 +158,12 @@ positive_context_case!(
     secret_in_html_meta_tag,
     "<meta name=\"api-key\" content=\"{}\">"
 );
-positive_context_case!(
-    secret_in_dockerfile_env,
-    "FROM scratch\nENV API_TOKEN={}\n"
-);
+positive_context_case!(secret_in_dockerfile_env, "FROM scratch\nENV API_TOKEN={}\n");
 positive_context_case!(
     secret_in_systemd_environment_line,
     "[Service]\nEnvironment=TOKEN={}\n"
 );
-positive_context_case!(
-    secret_in_powershell_assignment,
-    "$env:API_TOKEN = \"{}\"\n"
-);
+positive_context_case!(secret_in_powershell_assignment, "$env:API_TOKEN = \"{}\"\n");
 positive_context_case!(
     secret_in_sql_insert_statement,
     "INSERT INTO creds(token) VALUES ('{}');"
@@ -188,26 +184,11 @@ positive_context_case!(
     secret_in_kubernetes_manifest,
     "apiVersion: v1\nkind: Secret\nstringData:\n  token: {}\n"
 );
-positive_context_case!(
-    secret_in_nginx_env_directive,
-    "env API_TOKEN={};\n"
-);
-positive_context_case!(
-    secret_in_java_properties_file,
-    "api.token={}\n"
-);
-positive_context_case!(
-    secret_in_yaml_flow_mapping,
-    "{{ api_token: {} }}\n"
-);
-positive_context_case!(
-    secret_in_markdown_code_fence,
-    "```env\nAPI_TOKEN={}\n```\n"
-);
-positive_context_case!(
-    secret_in_quoted_json_array,
-    "[\"{}\", \"harmless\"]\n"
-);
+positive_context_case!(secret_in_nginx_env_directive, "env API_TOKEN={};\n");
+positive_context_case!(secret_in_java_properties_file, "api.token={}\n");
+positive_context_case!(secret_in_yaml_flow_mapping, "{{ api_token: {} }}\n");
+positive_context_case!(secret_in_markdown_code_fence, "```env\nAPI_TOKEN={}\n```\n");
+positive_context_case!(secret_in_quoted_json_array, "[\"{}\", \"harmless\"]\n");
 positive_context_case!(
     secret_in_multiline_heredoc_like_content,
     "cat <<EOF\n{}\nEOF\n"
@@ -216,10 +197,7 @@ positive_context_case!(
     secret_in_url_query_value,
     "https://example.invalid/?token={}\n"
 );
-positive_context_case!(
-    secret_in_shell_comment_context,
-    "# rotated token {}\n"
-);
+positive_context_case!(secret_in_shell_comment_context, "# rotated token {}\n");
 
 // ───────────────────────────────────────────────────────────────────────────
 // 3. FALSE POSITIVE RESISTANCE
@@ -279,7 +257,9 @@ fn null_padded_binaryish_chunk_still_detects_secret() {
     let chunk = make_chunk(&format!("\0BIN\0{VALID_CREDENTIAL}\0TAIL\0"));
     let matches = scanner.scan(&chunk);
     assert!(
-        matches.iter().any(|matched| matched.credential == VALID_CREDENTIAL),
+        matches
+            .iter()
+            .any(|matched| matched.credential == VALID_CREDENTIAL),
         "embedded null bytes must not prevent detection in binary-like text chunks"
     );
 }
@@ -421,7 +401,10 @@ fn scanner_is_thread_safe_under_parallel_load() {
     )));
 
     let baseline = scanner.scan(&chunk);
-    assert!(!baseline.is_empty(), "baseline scan must find the credential");
+    assert!(
+        !baseline.is_empty(),
+        "baseline scan must find the credential"
+    );
 
     let handles: Vec<_> = (0..16)
         .map(|_| {

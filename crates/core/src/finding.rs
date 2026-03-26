@@ -243,18 +243,22 @@ mod tests {
     redaction_case!(redact_single_char_secret, "a", "a...a");
     redaction_case!(redact_two_char_secret, "ab", "ab...ab");
     redaction_case!(redact_eight_char_secret, "12345678", "12...78");
-    redaction_case!(redact_prefixless_long_secret, "@@@@abcdefgh1234", "@@@@...1234");
     redaction_case!(
-        redact_unicode_secret,
-        "пароль-супер-длинный",
-        "паро...нный"
+        redact_prefixless_long_secret,
+        "@@@@abcdefgh1234",
+        "@@@@...1234"
     );
+    redaction_case!(redact_unicode_secret, "пароль-супер-длинный", "паро...нный");
     redaction_case!(
         redact_secret_with_preserved_ascii_prefix,
         "token_value_1234567890",
         "token_va...7890"
     );
-    redaction_case!(redact_repeated_edges_compacts_suffix, "aaaaabbbbb", "aaaa...bbbb");
+    redaction_case!(
+        redact_repeated_edges_compacts_suffix,
+        "aaaaabbbbb",
+        "aaaa...bbbb"
+    );
 
     #[test]
     fn git_history_deduplication_includes_commit_id() {

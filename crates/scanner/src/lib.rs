@@ -393,17 +393,15 @@ impl CompiledScanner {
         let chunk_text = &chunk.data;
         let mut all_matches = Vec::with_capacity((chunk_text.len() / 4096).max(16));
         let mut seen = std::collections::HashSet::new();
+        let mut seen_order = VecDeque::new();
         let mut offset = 0usize;
 
         while offset < chunk_text.len() {
             let end = window_end_offset(chunk_text, offset, Self::MAX_SCAN_CHUNK);
             let window_chunk = window_chunk(chunk, offset, end);
             for mut m in self.scan_inner(&window_chunk) {
-                if record_window_match(chunk_text, offset, &mut m, &mut seen) {
+                if record_window_match(chunk_text, offset, &mut m, &mut seen, &mut seen_order) {
                     all_matches.push(m);
-                }
-                if seen.len() >= MAX_WINDOW_DEDUP_ENTRIES {
-                    seen.clear();
                 }
             }
             if end >= chunk_text.len() {
@@ -1256,6 +1254,7 @@ fn record_window_match(
     offset: usize,
     matched: &mut RawMatch,
     seen: &mut std::collections::HashSet<(String, String, usize)>,
+    seen_order: &mut VecDeque<(String, String, usize)>,
 ) -> bool {
     matched.location.offset += offset;
     matched.location.line = Some(line_number_for_offset(chunk_text, matched.location.offset));
@@ -1264,7 +1263,19 @@ fn record_window_match(
         matched.credential.clone(),
         matched.location.offset,
     );
-    seen.insert(key)
+    if !seen.insert(key.clone()) {
+        return false;
+    }
+
+    seen_order.push_back(key);
+    while seen.len() > MAX_WINDOW_DEDUP_ENTRIES {
+        let Some(oldest) = seen_order.pop_front() else {
+            break;
+        };
+        seen.remove(&oldest);
+    }
+
+    true
 }
 
 fn next_window_offset(text: &str, end: usize, overlap: usize) -> usize {

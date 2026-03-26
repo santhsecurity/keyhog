@@ -8,11 +8,7 @@ id = "supabase-anon-key"
 name = "Supabase Anon Key"
 service = "supabase"
 severity = "medium"
-keywords = ["eyJ", "supabase", "anon", "anon key"]
-
-[[detector.patterns]]
-regex = "eyJ[a-zA-Z0-9_-]*\\.eyJ[a-zA-Z0-9_-]*\\.eyJ[a-zA-Z0-9_-]*"
-description = "Supabase anon key (JWT with role:anon claim) - check decoded payload for 'anon'"
+keywords = ["supabase", "anon", "anon key", "SUPABASE_ANON_KEY"]
 
 [[detector.patterns]]
 regex = "(?:SUPABASE_ANON_KEY|anon key)[=:\\s\"'']+(eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+)"

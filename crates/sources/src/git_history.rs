@@ -429,8 +429,16 @@ index 0000000..1111111
     }
 
     valid_sanitize_case!(sanitize_keeps_simple_file, "config.env", "config.env");
-    valid_sanitize_case!(sanitize_keeps_nested_file, "src/config.env", "src/config.env");
-    valid_sanitize_case!(sanitize_normalizes_curdir_prefix, "./src/config.env", "src/config.env");
+    valid_sanitize_case!(
+        sanitize_keeps_nested_file,
+        "src/config.env",
+        "src/config.env"
+    );
+    valid_sanitize_case!(
+        sanitize_normalizes_curdir_prefix,
+        "./src/config.env",
+        "src/config.env"
+    );
     valid_sanitize_case!(
         sanitize_normalizes_curdir_in_middle,
         "src/./config.env",
@@ -441,7 +449,11 @@ index 0000000..1111111
         "docs/My Secrets.txt",
         "docs/My Secrets.txt"
     );
-    valid_sanitize_case!(sanitize_keeps_unicode_name, "配置/密钥.env", "配置/密钥.env");
+    valid_sanitize_case!(
+        sanitize_keeps_unicode_name,
+        "配置/密钥.env",
+        "配置/密钥.env"
+    );
     valid_sanitize_case!(
         sanitize_keeps_dash_and_underscore,
         "a-b_c/file.name",
@@ -461,7 +473,10 @@ index 0000000..1111111
     invalid_sanitize_case!(sanitize_rejects_absolute_unix_path, "/var/tmp/secret");
     invalid_sanitize_case!(sanitize_rejects_double_parent_escape, "../../secret");
     invalid_sanitize_case!(sanitize_rejects_single_parent_escape, "../secret");
-    invalid_sanitize_case!(sanitize_rejects_parent_escape_after_normalization, "dir/../../config.env");
+    invalid_sanitize_case!(
+        sanitize_rejects_parent_escape_after_normalization,
+        "dir/../../config.env"
+    );
     invalid_sanitize_case!(sanitize_rejects_dev_null, "/dev/null");
     invalid_sanitize_case!(sanitize_rejects_newline, "a\nb");
     invalid_sanitize_case!(sanitize_rejects_carriage_return, "a\rb");

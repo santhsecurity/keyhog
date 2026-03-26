@@ -76,10 +76,7 @@ impl BinarySource {
             .spawn()
             .and_then(|mut child| {
                 let timeout = std::time::Duration::from_secs(GHIDRA_TIMEOUT_SECS);
-                match child
-                    .wait_timeout(timeout)
-                    .map_err(std::io::Error::other)?
-                {
+                match child.wait_timeout(timeout).map_err(std::io::Error::other)? {
                     Some(status) => Ok(status),
                     None => {
                         let _ = child.kill();

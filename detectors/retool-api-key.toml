@@ -1,6 +1,6 @@
 # Docs: https://docs.retool.com/data/api
 # Format: retool_api_<32+ alphanumeric characters>
-# Verify: GET /api/pages with Authorization header
+# Verify: none (Retool deployments are organization-specific; generic verification is unsafe)
 # Prefix: retool_api_
 
 [detector]
@@ -13,14 +13,3 @@ keywords = ["retool_api_", "RETOOL_API_KEY", "retool"]
 [[detector.patterns]]
 regex = 'retool_api_[a-zA-Z0-9]{32,}'
 description = "Retool API key (retool_api_ prefix)"
-
-[detector.verify]
-method = "GET"
-url = "https://retool.your-domain.com/api/pages"
-
-[detector.verify.auth]
-type = "bearer"
-field = "match"
-
-[detector.verify.success]
-status = 200

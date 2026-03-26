@@ -24,6 +24,7 @@ pub struct VerificationCache {
 #[derive(Hash, Eq, PartialEq, Clone)]
 struct CacheKey {
     credential_hash: [u8; VerificationCache::HASH_BYTES],
+    detector_id_hash: [u8; VerificationCache::HASH_BYTES],
     detector_id: Arc<str>,
 }
 
@@ -166,6 +167,7 @@ fn hash_credential(credential: &str) -> [u8; VerificationCache::HASH_BYTES] {
 fn cache_key(credential: &str, detector_id: &str) -> CacheKey {
     CacheKey {
         credential_hash: hash_credential(credential),
+        detector_id_hash: hash_credential(detector_id),
         detector_id: Arc::<str>::from(truncate_to_char_boundary(
             detector_id,
             VerificationCache::MAX_DETECTOR_ID_BYTES,
@@ -251,5 +253,33 @@ mod tests {
         assert!(cache.get("cred2", "det").is_some());
         assert!(cache.get("cred3", "det").is_some());
         assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn long_detector_ids_do_not_collide_after_truncation() {
+        let cache = VerificationCache::new(Duration::from_secs(60));
+        let shared_prefix = "x".repeat(VerificationCache::MAX_DETECTOR_ID_BYTES);
+        let detector_a = format!("{shared_prefix}alpha");
+        let detector_b = format!("{shared_prefix}beta");
+
+        cache.put(
+            "cred",
+            &detector_a,
+            VerificationResult::Live,
+            HashMap::from([("source".into(), "a".into())]),
+        );
+        cache.put(
+            "cred",
+            &detector_b,
+            VerificationResult::Dead,
+            HashMap::from([("source".into(), "b".into())]),
+        );
+
+        let (result_a, metadata_a) = cache.get("cred", &detector_a).unwrap();
+        let (result_b, metadata_b) = cache.get("cred", &detector_b).unwrap();
+        assert!(matches!(result_a, VerificationResult::Live));
+        assert!(matches!(result_b, VerificationResult::Dead));
+        assert_eq!(metadata_a["source"], "a");
+        assert_eq!(metadata_b["source"], "b");
     }
 }

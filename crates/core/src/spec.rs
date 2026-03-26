@@ -264,6 +264,7 @@ pub enum SpecError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use regex::Regex;
 
     #[test]
     fn parse_bearer_auth() {
@@ -397,5 +398,64 @@ status = 200
             .expect("compat detector missing");
         assert_eq!(compat.service, "github");
         assert_eq!(compat.patterns[0].regex, "ghp_[a-zA-Z0-9]{36}");
+    }
+
+    #[test]
+    fn supabase_anon_detector_requires_context_anchor() {
+        let file: DetectorFile =
+            toml::from_str(include_str!("../../../detectors/supabase-anon-key.toml"))
+                .expect("supabase detector should parse");
+        assert_eq!(file.detector.patterns.len(), 1);
+        let regex = Regex::new(&file.detector.patterns[0].regex).unwrap();
+        assert!(
+            regex.is_match("SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.signature")
+        );
+        assert!(!regex.is_match("eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.signature"));
+    }
+
+    #[test]
+    fn ceph_companion_requires_ceph_secret_context() {
+        let file: DetectorFile = toml::from_str(include_str!(
+            "../../../detectors/ceph-rados-gateway-credentials.toml"
+        ))
+        .expect("ceph detector should parse");
+        let companion = file.detector.companion.expect("ceph companion missing");
+        let regex = Regex::new(&companion.regex).unwrap();
+        assert!(regex.is_match("CEPH_SECRET_KEY=abcdEFGHijklMNOPqrstUVWXyz0123456789/+=="));
+        assert!(!regex.is_match("abcdEFGHijklMNOPqrstUVWXyz0123456789/+=="));
+    }
+
+    #[test]
+    fn lepton_secondary_pattern_needs_lepton_specific_context() {
+        let file: DetectorFile =
+            toml::from_str(include_str!("../../../detectors/leptonai-api-token.toml"))
+                .expect("lepton detector should parse");
+        let regex = Regex::new(&file.detector.patterns[1].regex).unwrap();
+        assert!(regex.is_match("LEPTON_TOKEN=abcdefghijklmnopqrstuvwxyz123456 lepton.ai"));
+        assert!(!regex.is_match("token=abcdefghijklmnopqrstuvwxyz123456 example.com"));
+    }
+
+    #[test]
+    fn infura_detector_uses_basic_auth_with_companion_secret() {
+        let file: DetectorFile = toml::from_str(include_str!(
+            "../../../detectors/infura-project-credentials.toml"
+        ))
+        .expect("infura detector should parse");
+        let verify = file.detector.verify.expect("infura verify missing");
+        match verify.auth {
+            AuthSpec::Basic { username, password } => {
+                assert_eq!(username, "match");
+                assert_eq!(password, "companion.infura_project_secret");
+            }
+            other => panic!("unexpected auth spec: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn retool_detector_is_unverifiable_without_deployment_domain() {
+        let file: DetectorFile =
+            toml::from_str(include_str!("../../../detectors/retool-api-key.toml"))
+                .expect("retool detector should parse");
+        assert!(file.detector.verify.is_none());
     }
 }
