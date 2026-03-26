@@ -237,28 +237,37 @@ fn extract_new_path(line: &str) -> Option<String> {
 }
 
 fn sanitize_path(path: &str) -> Option<String> {
-    let path = path.trim();
+    let path = path.trim().replace('\\', "/");
     if path.is_empty() || path == "/dev/null" {
         return None;
     }
 
-    let candidate = Path::new(path);
+    let candidate = Path::new(&path);
     if candidate.is_absolute() || path.chars().any(char::is_control) {
         return None;
     }
 
-    if candidate.components().any(|component| {
-        matches!(
-            component,
-            std::path::Component::ParentDir
-                | std::path::Component::RootDir
-                | std::path::Component::Prefix(_)
-        )
-    }) {
-        return None;
+    let mut normalized = Vec::new();
+    for component in candidate.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(part) => {
+                normalized.push(part.to_string_lossy().into_owned());
+            }
+            std::path::Component::ParentDir => {
+                normalized.pop()?;
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                return None;
+            }
+        }
     }
 
-    Some(candidate.to_string_lossy().into_owned())
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized.join("/"))
+    }
 }
 
 #[cfg(test)]
@@ -399,5 +408,110 @@ index 0000000..1111111
         assert!(sanitize_path("/etc/passwd").is_none());
         assert!(sanitize_path("evil\npath").is_none());
         assert_eq!(sanitize_path("src/main.rs").as_deref(), Some("src/main.rs"));
+    }
+
+    macro_rules! valid_sanitize_case {
+        ($name:ident, $input:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                assert_eq!(sanitize_path($input).as_deref(), Some($expected));
+            }
+        };
+    }
+
+    macro_rules! invalid_sanitize_case {
+        ($name:ident, $input:expr) => {
+            #[test]
+            fn $name() {
+                assert!(sanitize_path($input).is_none());
+            }
+        };
+    }
+
+    valid_sanitize_case!(sanitize_keeps_simple_file, "config.env", "config.env");
+    valid_sanitize_case!(sanitize_keeps_nested_file, "src/config.env", "src/config.env");
+    valid_sanitize_case!(sanitize_normalizes_curdir_prefix, "./src/config.env", "src/config.env");
+    valid_sanitize_case!(
+        sanitize_normalizes_curdir_in_middle,
+        "src/./config.env",
+        "src/config.env"
+    );
+    valid_sanitize_case!(
+        sanitize_keeps_spaces_in_name,
+        "docs/My Secrets.txt",
+        "docs/My Secrets.txt"
+    );
+    valid_sanitize_case!(sanitize_keeps_unicode_name, "配置/密钥.env", "配置/密钥.env");
+    valid_sanitize_case!(
+        sanitize_keeps_dash_and_underscore,
+        "a-b_c/file.name",
+        "a-b_c/file.name"
+    );
+    valid_sanitize_case!(
+        sanitize_collapses_parent_after_normal_segment,
+        "src/dir/../config.env",
+        "src/config.env"
+    );
+    valid_sanitize_case!(
+        sanitize_keeps_windowsish_component_text,
+        "C:project/file.txt",
+        "C:project/file.txt"
+    );
+
+    invalid_sanitize_case!(sanitize_rejects_absolute_unix_path, "/var/tmp/secret");
+    invalid_sanitize_case!(sanitize_rejects_double_parent_escape, "../../secret");
+    invalid_sanitize_case!(sanitize_rejects_single_parent_escape, "../secret");
+    invalid_sanitize_case!(sanitize_rejects_parent_escape_after_normalization, "dir/../../config.env");
+    invalid_sanitize_case!(sanitize_rejects_dev_null, "/dev/null");
+    invalid_sanitize_case!(sanitize_rejects_newline, "a\nb");
+    invalid_sanitize_case!(sanitize_rejects_carriage_return, "a\rb");
+    invalid_sanitize_case!(sanitize_rejects_tab, "a\tb");
+    invalid_sanitize_case!(sanitize_rejects_empty_path, "");
+    invalid_sanitize_case!(sanitize_rejects_rooted_with_curdir, "/./secret");
+    invalid_sanitize_case!(sanitize_rejects_windows_parent_escape, "..\\secret");
+
+    #[test]
+    fn parse_git_log_handles_renames_with_added_lines() {
+        let log = r#"commit def456
+Author: Test User <test@example.com>
+Date: 2026-03-21T12:00:00-07:00
+
+    Rename and update secret
+
+diff --git a/old.env b/new.env
+similarity index 80%
+rename from old.env
+rename to new.env
+--- a/old.env
++++ b/new.env
+@@ -1 +1,2 @@
+-token = old
++token = new
++api_key = sk-legendary
+"#;
+
+        let hunks = parse_git_log_for_added_lines(log);
+        assert_eq!(hunks.len(), 1);
+        assert_eq!(hunks[0].path, "new.env");
+        assert!(hunks[0].content.contains("api_key = sk-legendary"));
+    }
+
+    #[test]
+    fn parse_git_log_rejects_malicious_new_paths() {
+        let log = r#"commit badc0de
+Author: Test User <test@example.com>
+Date: 2026-03-21T12:00:00-07:00
+
+    Malicious patch
+
+diff --git a/safe.txt b/../../etc/passwd
+--- a/safe.txt
++++ b/../../etc/passwd
+@@ -0,0 +1 @@
++api_key = should-not-scan
+"#;
+
+        let hunks = parse_git_log_for_added_lines(log);
+        assert!(hunks.is_empty());
     }
 }

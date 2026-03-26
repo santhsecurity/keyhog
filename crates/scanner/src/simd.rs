@@ -133,10 +133,10 @@ pub(crate) mod backend {
             });
 
             // Return scratch to pool
-            if let Ok(mut p) = self.scratch_pool.lock() {
-                if p.len() < 32 {
-                    p.push(scratch);
-                }
+            if let Ok(mut p) = self.scratch_pool.lock()
+                && p.len() < 32
+            {
+                p.push(scratch);
             }
 
             matches

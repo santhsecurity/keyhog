@@ -1,6 +1,7 @@
 //! Docker image source: exports an image with `docker image save`, unpacks each
 //! layer, and reuses the filesystem source to scan extracted files safely.
 
+use codewalk::{CodeWalker, WalkConfig};
 use std::fs::File;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
@@ -176,14 +177,22 @@ fn validate_extracted_tree<R: std::io::Read>(
 
 fn find_layer_archives(root_path: &Path) -> Result<Vec<PathBuf>, SourceError> {
     let mut layers = Vec::new();
-    for entry in walkdir::WalkDir::new(root_path) {
-        let entry = entry.map_err(|e| {
-            SourceError::Io(std::io::Error::other(format!(
-                "failed to walk image archive: {e}"
-            )))
-        })?;
-        if entry.file_type().is_file() && entry.file_name() == "layer.tar" {
-            layers.push(entry.path().to_path_buf());
+
+    let walker = CodeWalker::new(
+        root_path,
+        WalkConfig::default()
+            .follow_symlinks(false)
+            .respect_gitignore(false)
+            .skip_hidden(false)
+            .skip_binary(false)
+            .max_file_size(0),
+    )
+    .walk()
+    .into_iter();
+
+    for entry in walker {
+        if entry.path.file_name().and_then(|name| name.to_str()) == Some("layer.tar") {
+            layers.push(entry.path);
         }
     }
     Ok(layers)

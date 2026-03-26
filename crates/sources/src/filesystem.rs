@@ -1,9 +1,10 @@
 //! Filesystem source: recursively walks a directory tree, skips binary files,
 //! respects `.gitignore`, and yields chunks for scanning.
 
+use codewalk::{CodeWalker, WalkConfig};
 use keyhog_core::{Chunk, ChunkMetadata, Source, SourceError};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use walkdir::WalkDir;
 
 /// Minimum file size to use memory mapping (4 KiB roughly matches a page and
 /// avoids mmap overhead on tiny files).
@@ -63,32 +64,14 @@ impl Source for FilesystemSource {
     }
 
     fn chunks(&self) -> Box<dyn Iterator<Item = Result<Chunk, SourceError>> + '_> {
-        let walker = WalkDir::new(&self.root)
-            .follow_links(false)
-            .into_iter()
-            .filter_entry(|entry| {
-                if entry.file_type().is_dir() {
-                    let name = entry.file_name().to_string_lossy();
-                    return !SKIP_DIRS.contains(&name.as_ref());
-                }
-                true
-            });
-
         let max_size = self.max_file_size;
+        let walker = CodeWalker::new(&self.root, walker_config(self.max_file_size))
+            .walk()
+            .into_iter();
 
         Box::new(walker.filter_map(move |entry| {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(e) => {
-                    return Some(Err(SourceError::Io(std::io::Error::other(e.to_string()))));
-                }
-            };
-
-            if !entry.file_type().is_file() {
-                return None;
-            }
-
-            let path = entry.path();
+            let path = entry.path;
+            let file_size = entry.size;
 
             // Skip by extension.
             if let Some(ext) = path.extension().and_then(|e| e.to_str())
@@ -109,12 +92,6 @@ impl Source for FilesystemSource {
                 return None;
             }
 
-            // Skip large files.
-            let metadata = match entry.metadata() {
-                Ok(m) => m,
-                Err(_) => return None,
-            };
-            let file_size = metadata.len();
             if file_size > max_size {
                 return Some(Err(SourceError::Other(format!(
                     "skipping {}: file size {} exceeds {} byte limit",
@@ -126,9 +103,9 @@ impl Source for FilesystemSource {
             // Read file content. If the file is binary (contains null bytes),
             // extract printable strings instead of returning raw content.
             let file_text = if file_size >= MMAP_THRESHOLD {
-                read_file_mmap(path)
+                read_file_mmap(&path)
             } else {
-                read_file_buffered(path)
+                read_file_buffered(&path)
             };
 
             // Auto-detect binary files and extract strings
@@ -136,7 +113,7 @@ impl Source for FilesystemSource {
                 Some(text) if !text.is_empty() => (text, "filesystem"),
                 _ => {
                     // File couldn't be read as text — try binary string extraction
-                    if let Ok(bytes) = read_file_safe(path) {
+                    if let Ok(bytes) = read_file_safe(&path) {
                         let strings = crate::strings::extract_printable_strings(&bytes, 8);
                         if strings.is_empty() {
                             return None;
@@ -160,6 +137,25 @@ impl Source for FilesystemSource {
             }))
         }))
     }
+}
+
+fn walker_config(max_file_size: u64) -> WalkConfig {
+    let mut exclude_extensions = HashSet::new();
+    exclude_extensions.extend(SKIP_EXTENSIONS.iter().map(|ext| (*ext).to_string()));
+
+    let mut exclude_dirs = HashSet::new();
+    exclude_dirs.extend(SKIP_DIRS.iter().map(|dir| (*dir).to_string()));
+
+    WalkConfig::default()
+        .max_file_size(max_file_size)
+        .follow_symlinks(false)
+        .respect_gitignore(false)
+        .skip_hidden(false)
+        .skip_binary(false)
+        .exclude_extensions(exclude_extensions)
+        .exclude_dirs(exclude_dirs)
+        .mmap_threshold(MMAP_THRESHOLD)
+        .use_mmap(true)
 }
 
 /// Read a small file safely (preventing TOCTOU symlink attacks).
@@ -374,6 +370,50 @@ mod tests {
     }
 
     #[test]
+    fn looks_binary_detects_null_bytes() {
+        assert!(looks_binary(b"abc\0def"));
+    }
+
+    #[test]
+    fn looks_binary_detects_pdf_magic() {
+        assert!(looks_binary(b"%PDF-1.7"));
+    }
+
+    #[test]
+    fn looks_binary_detects_png_magic() {
+        assert!(looks_binary(b"\x89PNG\r\n\x1a\nrest"));
+    }
+
+    #[test]
+    fn looks_binary_allows_plain_utf8_text() {
+        assert!(!looks_binary("hello\nworld\n".as_bytes()));
+    }
+
+    #[test]
+    fn decode_utf16_le_with_bom() {
+        let bytes = [0xFF, 0xFE, b'A', 0x00, b'B', 0x00];
+        assert_eq!(decode_utf16(&bytes).as_deref(), Some("AB"));
+    }
+
+    #[test]
+    fn decode_utf16_be_with_bom() {
+        let bytes = [0xFE, 0xFF, 0x00, b'A', 0x00, b'B'];
+        assert_eq!(decode_utf16(&bytes).as_deref(), Some("AB"));
+    }
+
+    #[test]
+    fn decode_utf16_rejects_odd_length_payload() {
+        let bytes = [0xFF, 0xFE, b'A'];
+        assert!(decode_utf16(&bytes).is_none());
+    }
+
+    #[test]
+    fn decode_text_file_strips_utf8_bom() {
+        let bytes = [0xEF, 0xBB, 0xBF, b'a', b'b', b'c'];
+        assert_eq!(decode_text_file(&bytes).as_deref(), Some("abc"));
+    }
+
+    #[test]
     fn mmap_extracts_strings_from_binaryish_file() {
         let dir = std::env::temp_dir().join("keyhog_test_binaryish_mmap");
         let _ = fs::remove_dir_all(&dir);
@@ -397,5 +437,43 @@ mod tests {
         assert_eq!(chunks[0].metadata.source_type, "filesystem:binary-strings");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn symlink_loops_are_not_followed() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("nested");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("config.env"), "LEGENDARY_LOOP=present").unwrap();
+        symlink(dir.path(), nested.join("loop")).unwrap();
+
+        let chunks: Vec<_> = FilesystemSource::new(dir.path().to_path_buf())
+            .chunks()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].data.contains("LEGENDARY_LOOP"));
+    }
+
+    #[test]
+    fn files_larger_than_100mb_are_skipped_cleanly() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("huge.log");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(101 * 1024 * 1024).unwrap();
+
+        let chunks: Vec<_> = FilesystemSource::new(dir.path().to_path_buf())
+            .with_max_file_size(100 * 1024 * 1024)
+            .chunks()
+            .collect();
+
+        assert!(
+            chunks.is_empty(),
+            "oversized sparse files should be skipped without panicking"
+        );
     }
 }

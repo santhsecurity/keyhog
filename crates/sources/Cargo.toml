@@ -25,7 +25,7 @@ binary = ["dep:goblin", "dep:tempfile", "dep:glob", "dep:wait-timeout"]  # ELF/P
 
 [dependencies]
 keyhog-core = { workspace = true }
-walkdir = { workspace = true }
+codewalk = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 gix = { workspace = true, optional = true }

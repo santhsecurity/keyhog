@@ -22,6 +22,16 @@ fn make_chunk(data: &str) -> Chunk {
     }
 }
 
+fn assert_detected(data: &str) {
+    let scanner = test_scanner();
+    let chunk = make_chunk(data);
+    let matches = scanner.scan(&chunk);
+    assert!(
+        matches.iter().any(|matched| matched.credential == VALID_CREDENTIAL),
+        "expected credential to be detected in: {data}"
+    );
+}
+
 /// Build a simple token detector for testing.
 fn token_detector() -> DetectorSpec {
     DetectorSpec {
@@ -127,14 +137,89 @@ fn secret_in_yaml_value() {
 
 #[test]
 fn secret_in_shell_export() {
-    let scanner = test_scanner();
-    let chunk = make_chunk(&format!("export API_KEY=\"{VALID_CREDENTIAL}\"\n"));
-    let matches = scanner.scan(&chunk);
-    assert!(
-        !matches.is_empty(),
-        "secret in shell export must be detected"
-    );
+    assert_detected(&format!("export API_KEY=\"{VALID_CREDENTIAL}\"\n"));
 }
+
+macro_rules! positive_context_case {
+    ($name:ident, $template:expr) => {
+        #[test]
+        fn $name() {
+            assert_detected(&format!($template, VALID_CREDENTIAL));
+        }
+    };
+}
+
+positive_context_case!(secret_in_ini_assignment, "api_key={}\n");
+positive_context_case!(secret_in_toml_assignment, "api_key = \"{}\"\n");
+positive_context_case!(secret_in_xml_element, "<token>{}</token>");
+positive_context_case!(
+    secret_in_html_meta_tag,
+    "<meta name=\"api-key\" content=\"{}\">"
+);
+positive_context_case!(
+    secret_in_dockerfile_env,
+    "FROM scratch\nENV API_TOKEN={}\n"
+);
+positive_context_case!(
+    secret_in_systemd_environment_line,
+    "[Service]\nEnvironment=TOKEN={}\n"
+);
+positive_context_case!(
+    secret_in_powershell_assignment,
+    "$env:API_TOKEN = \"{}\"\n"
+);
+positive_context_case!(
+    secret_in_sql_insert_statement,
+    "INSERT INTO creds(token) VALUES ('{}');"
+);
+positive_context_case!(
+    secret_in_rust_const_literal,
+    "const API_TOKEN: &str = \"{}\";\n"
+);
+positive_context_case!(
+    secret_in_javascript_object,
+    "const cfg = {{ token: \"{}\" }};\n"
+);
+positive_context_case!(
+    secret_in_terraform_variable,
+    "variable \"api_token\" {{ default = \"{}\" }}\n"
+);
+positive_context_case!(
+    secret_in_kubernetes_manifest,
+    "apiVersion: v1\nkind: Secret\nstringData:\n  token: {}\n"
+);
+positive_context_case!(
+    secret_in_nginx_env_directive,
+    "env API_TOKEN={};\n"
+);
+positive_context_case!(
+    secret_in_java_properties_file,
+    "api.token={}\n"
+);
+positive_context_case!(
+    secret_in_yaml_flow_mapping,
+    "{{ api_token: {} }}\n"
+);
+positive_context_case!(
+    secret_in_markdown_code_fence,
+    "```env\nAPI_TOKEN={}\n```\n"
+);
+positive_context_case!(
+    secret_in_quoted_json_array,
+    "[\"{}\", \"harmless\"]\n"
+);
+positive_context_case!(
+    secret_in_multiline_heredoc_like_content,
+    "cat <<EOF\n{}\nEOF\n"
+);
+positive_context_case!(
+    secret_in_url_query_value,
+    "https://example.invalid/?token={}\n"
+);
+positive_context_case!(
+    secret_in_shell_comment_context,
+    "# rotated token {}\n"
+);
 
 // ───────────────────────────────────────────────────────────────────────────
 // 3. FALSE POSITIVE RESISTANCE
@@ -142,7 +227,6 @@ fn secret_in_shell_export() {
 
 #[test]
 fn pure_placeholder_not_flagged() {
-    let scanner = test_scanner();
     // A placeholder that matches the pattern but is obviously fake.
     let detector = DetectorSpec {
         id: "aws-key".into(),
@@ -187,6 +271,17 @@ fn binary_garbage_returns_no_matches() {
     let matches = scanner.scan(&chunk);
     // We don't assert empty — we assert it doesn't panic or hang.
     let _ = matches;
+}
+
+#[test]
+fn null_padded_binaryish_chunk_still_detects_secret() {
+    let scanner = test_scanner();
+    let chunk = make_chunk(&format!("\0BIN\0{VALID_CREDENTIAL}\0TAIL\0"));
+    let matches = scanner.scan(&chunk);
+    assert!(
+        matches.iter().any(|matched| matched.credential == VALID_CREDENTIAL),
+        "embedded null bytes must not prevent detection in binary-like text chunks"
+    );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -314,4 +409,31 @@ fn unicode_homoglyph_does_not_evade() {
         !matches.is_empty(),
         "unicode context must not prevent ASCII credential detection"
     );
+}
+
+#[test]
+fn scanner_is_thread_safe_under_parallel_load() {
+    use std::sync::Arc;
+
+    let scanner = Arc::new(test_scanner());
+    let chunk = Arc::new(make_chunk(&format!(
+        "first={VALID_CREDENTIAL}\nsecond={VALID_CREDENTIAL}\n"
+    )));
+
+    let baseline = scanner.scan(&chunk);
+    assert!(!baseline.is_empty(), "baseline scan must find the credential");
+
+    let handles: Vec<_> = (0..16)
+        .map(|_| {
+            let scanner = Arc::clone(&scanner);
+            let chunk = Arc::clone(&chunk);
+            std::thread::spawn(move || scanner.scan(&chunk))
+        })
+        .collect();
+
+    for handle in handles {
+        let matches = handle.join().unwrap();
+        assert_eq!(matches.len(), baseline.len());
+        assert_eq!(matches[0].credential, baseline[0].credential);
+    }
 }

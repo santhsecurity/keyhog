@@ -48,6 +48,7 @@ mod adversarial_tests;
 
 use aho_corasick::AhoCorasick;
 use keyhog_core::{Chunk, CompanionSpec, DetectorSpec, MatchLocation, PatternSpec, RawMatch};
+use multimatch::{MatchError, PatternSet, PatternSetBuilder};
 use regex::Regex;
 use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
@@ -62,7 +63,6 @@ const LARGE_FALLBACK_SCAN_THRESHOLD: usize = 10_000;
 /// Hard cap on the dedup set to prevent unbounded memory growth when scanning
 /// repositories with millions of duplicate credential-like strings.
 const MAX_WINDOW_DEDUP_ENTRIES: usize = 100_000;
-const EMPTY_AC_PATTERNS: &[String] = &[];
 
 /// Maximum bytes scanned in a single chunk. Files larger than this are split
 /// into overlapping windows. 1 MiB keeps peak RSS predictable under parallel
@@ -172,6 +172,8 @@ pub enum ScanError {
     },
     #[error("failed to compile scanner regex set: {0}")]
     RegexSetCompile(#[from] regex::Error),
+    #[error("failed to build multimatch automaton: {0}")]
+    Multimatch(#[from] MatchError),
     #[error("failed to build Aho-Corasick automaton: {0}")]
     AhoCorasick(#[from] aho_corasick::BuildError),
 }
@@ -193,8 +195,8 @@ struct CompiledCompanion {
 /// Aho-Corasick automaton for prefiltering, backed by individual
 /// regexes for extraction.
 pub struct CompiledScanner {
-    /// Aho-Corasick automaton built from literal prefixes of patterns.
-    ac: AhoCorasick,
+    /// Pattern matcher built from literal prefixes of patterns.
+    ac: Option<PatternSet>,
     /// Maps AC pattern index → compiled pattern entry.
     ac_map: Vec<CompiledPattern>,
     /// Batched first-pass regex confirmation for AC-backed patterns.
@@ -247,10 +249,7 @@ impl CompiledScanner {
             "scanner compiled"
         );
 
-        let ac = AhoCorasick::builder()
-            .ascii_case_insensitive(false)
-            .build(select_ac_patterns(&ac_literals))
-            .map_err(ScanError::AhoCorasick)?;
+        let ac = build_ac_pattern_set(&ac_literals)?;
         let prefix_propagation = prefix_trie::build_propagation_table(&ac_literals);
         let detector_to_patterns = build_detector_to_patterns(&ac_map, detectors.len());
         let same_prefix_patterns = build_same_prefix_patterns(&ac_literals);
@@ -650,13 +649,18 @@ impl CompiledScanner {
 
     fn collect_triggered_patterns(&self, text: &str) -> Vec<u64> {
         let mut triggered_patterns = vec![0u64; self.ac_map.len().div_ceil(64)];
-        for ac_match in self.ac.find_iter(text) {
-            let pat_idx = ac_match.pattern().as_usize();
-            // SAFETY: pat_idx is bounded by ac_map.len() which is checked at compile time.
-            // pat_idx % 64 is always 0..63, so the shift never overflows.
-            triggered_patterns[pat_idx / 64] |= 1u64 << (pat_idx % 64);
-            for &propagated_idx in &self.prefix_propagation[pat_idx] {
-                triggered_patterns[propagated_idx / 64] |= 1 << (propagated_idx % 64);
+        if let Some(ac) = &self.ac {
+            for ac_match in ac.scan(text.as_bytes()) {
+                let pat_idx = ac_match.pattern_id;
+                if pat_idx >= self.ac_map.len() {
+                    continue;
+                }
+                // SAFETY: pat_idx is bounded by ac_map.len() which is checked at compile time.
+                // pat_idx % 64 is always 0..63, so the shift never overflows.
+                triggered_patterns[pat_idx / 64] |= 1u64 << (pat_idx % 64);
+                for &propagated_idx in &self.prefix_propagation[pat_idx] {
+                    triggered_patterns[propagated_idx / 64] |= 1 << (propagated_idx % 64);
+                }
             }
         }
         triggered_patterns
@@ -1162,12 +1166,17 @@ fn log_quality_warnings(warnings: &[String]) {
     }
 }
 
-fn select_ac_patterns(ac_literals: &[String]) -> &[String] {
+fn build_ac_pattern_set(ac_literals: &[String]) -> Result<Option<PatternSet>, ScanError> {
     if ac_literals.is_empty() {
-        EMPTY_AC_PATTERNS
-    } else {
-        ac_literals
+        return Ok(None);
     }
+
+    let mut builder = PatternSetBuilder::new();
+    for (index, literal) in ac_literals.iter().enumerate() {
+        builder = builder.add_literal(literal, index);
+    }
+
+    Ok(Some(builder.build()?))
 }
 
 fn build_detector_to_patterns(

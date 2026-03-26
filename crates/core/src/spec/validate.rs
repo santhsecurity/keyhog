@@ -2,6 +2,7 @@
 
 use super::DetectorSpec;
 use regex_syntax::ast::{self, Ast};
+use serde::Serialize;
 
 const MAX_REGEX_PATTERN_LEN: usize = 4096;
 const MAX_REGEX_AST_NODES: usize = 512;
@@ -9,7 +10,7 @@ const MAX_REGEX_ALTERNATION_BRANCHES: usize = 64;
 const MAX_REGEX_REPEAT_BOUND: u32 = 10_000;
 
 /// Quality issue found in a detector spec.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum QualityIssue {
     Error(String),
     Warning(String),

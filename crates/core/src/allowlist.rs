@@ -17,6 +17,7 @@ use std::path::Path;
 use crate::VerifiedFinding;
 
 /// User-defined suppressions loaded from `.keyhogignore`: credential hashes, detector IDs, and path globs.
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Allowlist {
     /// SHA-256 hashes of credentials to ignore.
     pub credential_hashes: HashSet<[u8; 32]>,

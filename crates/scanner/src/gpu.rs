@@ -250,7 +250,7 @@ mod backend {
             pass.set_pipeline(&gpu.pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
             // Each workgroup processes 64 items
-            let workgroups = (batch_size as u32 + 63) / 64;
+            let workgroups = (batch_size as u32).div_ceil(64);
             pass.dispatch_workgroups(workgroups, 1, 1);
         }
 

@@ -78,7 +78,7 @@ impl BinarySource {
                 let timeout = std::time::Duration::from_secs(GHIDRA_TIMEOUT_SECS);
                 match child
                     .wait_timeout(timeout)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+                    .map_err(std::io::Error::other)?
                 {
                     Some(status) => Ok(status),
                     None => {
@@ -235,12 +235,12 @@ fn find_ghidra_headless() -> Option<PathBuf> {
     }
 
     // Check PATH
-    if let Ok(output) = Command::new("which").arg("analyzeHeadless").output() {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Some(PathBuf::from(path));
-            }
+    if let Ok(output) = Command::new("which").arg("analyzeHeadless").output()
+        && output.status.success()
+    {
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !path.is_empty() {
+            return Some(PathBuf::from(path));
         }
     }
 
@@ -412,7 +412,7 @@ fn extract_sections(bytes: &[u8], path: &str) -> Option<Vec<Chunk>> {
         Object::Elf(elf) => {
             for sh in &elf.section_headers {
                 let name = elf.shdr_strtab.get_at(sh.sh_name).unwrap_or("");
-                if target_sections.iter().any(|t| name == *t) {
+                if target_sections.contains(&name) {
                     let start = sh.sh_offset as usize;
                     let end = (start + sh.sh_size as usize).min(bytes.len());
                     if start < end {
@@ -439,7 +439,7 @@ fn extract_sections(bytes: &[u8], path: &str) -> Option<Vec<Chunk>> {
                 let name = std::str::from_utf8(&section.name)
                     .unwrap_or("")
                     .trim_end_matches('\0');
-                if target_sections.iter().any(|t| name == *t) {
+                if target_sections.contains(&name) {
                     let start = section.pointer_to_raw_data as usize;
                     let end = (start + section.size_of_raw_data as usize).min(bytes.len());
                     if start < end {
@@ -461,30 +461,27 @@ fn extract_sections(bytes: &[u8], path: &str) -> Option<Vec<Chunk>> {
                 }
             }
         }
-        Object::Mach(mach) => {
-            if let goblin::mach::Mach::Binary(macho) = mach {
-                for seg in &macho.segments {
-                    for (section, _) in seg.sections().unwrap_or_default() {
-                        let name = section.name().unwrap_or("");
-                        if target_sections.iter().any(|t| name == *t) {
-                            let start = section.offset as usize;
-                            let end = (start + section.size as usize).min(bytes.len());
-                            if start < end {
-                                let section_bytes = &bytes[start..end];
-                                let strings =
-                                    extract_printable_strings(section_bytes, MIN_STRING_LEN);
-                                if !strings.is_empty() {
-                                    chunks.push(Chunk {
-                                        data: strings.join("\n"),
-                                        metadata: ChunkMetadata {
-                                            source_type: format!("binary:macho:{name}"),
-                                            path: Some(path.to_string()),
-                                            commit: None,
-                                            author: None,
-                                            date: None,
-                                        },
-                                    });
-                                }
+        Object::Mach(goblin::mach::Mach::Binary(macho)) => {
+            for seg in &macho.segments {
+                for (section, _) in seg.sections().unwrap_or_default() {
+                    let name = section.name().unwrap_or("");
+                    if target_sections.contains(&name) {
+                        let start = section.offset as usize;
+                        let end = (start + section.size as usize).min(bytes.len());
+                        if start < end {
+                            let section_bytes = &bytes[start..end];
+                            let strings = extract_printable_strings(section_bytes, MIN_STRING_LEN);
+                            if !strings.is_empty() {
+                                chunks.push(Chunk {
+                                    data: strings.join("\n"),
+                                    metadata: ChunkMetadata {
+                                        source_type: format!("binary:macho:{name}"),
+                                        path: Some(path.to_string()),
+                                        commit: None,
+                                        author: None,
+                                        date: None,
+                                    },
+                                });
                             }
                         }
                     }

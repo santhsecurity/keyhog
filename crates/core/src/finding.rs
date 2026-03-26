@@ -229,4 +229,57 @@ mod tests {
         };
         assert_eq!(m1.deduplication_key(), m2.deduplication_key());
     }
+
+    macro_rules! redaction_case {
+        ($name:ident, $input:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                assert_eq!(redact($input), $expected);
+            }
+        };
+    }
+
+    redaction_case!(redact_empty_secret, "", "********");
+    redaction_case!(redact_single_char_secret, "a", "a...a");
+    redaction_case!(redact_two_char_secret, "ab", "ab...ab");
+    redaction_case!(redact_eight_char_secret, "12345678", "12...78");
+    redaction_case!(redact_prefixless_long_secret, "@@@@abcdefgh1234", "@@@@...1234");
+    redaction_case!(
+        redact_unicode_secret,
+        "пароль-супер-длинный",
+        "паро...нный"
+    );
+    redaction_case!(
+        redact_secret_with_preserved_ascii_prefix,
+        "token_value_1234567890",
+        "token_va...7890"
+    );
+    redaction_case!(redact_repeated_edges_compacts_suffix, "aaaaabbbbb", "aaaa...bbbb");
+
+    #[test]
+    fn git_history_deduplication_includes_commit_id() {
+        let matched = RawMatch {
+            detector_id: "aws".into(),
+            detector_name: "AWS".into(),
+            service: "aws".into(),
+            severity: Severity::Critical,
+            credential: "AKIAIOSFODNN7EXAMPLE".into(),
+            companion: None,
+            location: MatchLocation {
+                source: "git-history".into(),
+                file_path: Some("history.env".into()),
+                line: Some(1),
+                offset: 0,
+                commit: Some("abc123".into()),
+                author: None,
+                date: None,
+            },
+            entropy: None,
+            confidence: None,
+        };
+
+        let (detector, credential) = matched.deduplication_key();
+        assert_eq!(detector, "aws:abc123");
+        assert_eq!(credential, "AKIAIOSFODNN7EXAMPLE");
+    }
 }

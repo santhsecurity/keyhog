@@ -304,6 +304,7 @@ async fn verify_credential(
     companion: Option<&str>,
     timeout: Duration,
 ) -> VerificationAttempt {
+    let timeout = verification_timeout(spec, timeout);
     let raw_url = interpolate(&spec.url, credential, companion);
     let resolved_target = match resolved_client_for_url(client, &raw_url, timeout).await {
         Ok(resolved_target) => resolved_target,
@@ -401,6 +402,12 @@ async fn verify_credential(
         metadata,
         transient: false,
     }
+}
+
+fn verification_timeout(spec: &keyhog_core::VerifySpec, default_timeout: Duration) -> Duration {
+    spec.timeout_ms
+        .map(Duration::from_millis)
+        .unwrap_or(default_timeout)
 }
 
 async fn resolved_client_for_url(
@@ -1563,6 +1570,57 @@ mod tests {
         assert!(!body_indicates_error("this has \"error\" in it"));
     }
 
+    macro_rules! indicator_case {
+        ($name:ident, $indicator:expr) => {
+            #[test]
+            fn $name() {
+                let body = format!(r#"{{"{}": true}}"#, $indicator);
+                assert!(body_indicates_error(&body));
+            }
+        };
+    }
+
+    indicator_case!(indicator_unauthorized_detected, "unauthorized");
+    indicator_case!(indicator_forbidden_detected, "forbidden");
+    indicator_case!(indicator_invalid_detected, "invalid");
+    indicator_case!(indicator_invalid_token_detected, "invalid_token");
+    indicator_case!(indicator_invalid_key_detected, "invalid_key");
+    indicator_case!(indicator_invalid_api_key_detected, "invalid_api_key");
+    indicator_case!(indicator_authentication_error_detected, "authentication_error");
+    indicator_case!(indicator_auth_error_detected, "auth_error");
+    indicator_case!(indicator_unauthenticated_detected, "unauthenticated");
+    indicator_case!(indicator_not_authenticated_detected, "not_authenticated");
+    indicator_case!(indicator_access_denied_detected, "access_denied");
+    indicator_case!(indicator_permission_denied_detected, "permission_denied");
+    indicator_case!(indicator_invalid_credentials_detected, "invalid_credentials");
+    indicator_case!(indicator_bad_credentials_detected, "bad_credentials");
+    indicator_case!(indicator_expired_detected, "expired");
+    indicator_case!(indicator_token_expired_detected, "token_expired");
+    indicator_case!(indicator_key_expired_detected, "key_expired");
+    indicator_case!(indicator_revoked_detected, "revoked");
+    indicator_case!(indicator_inactive_detected, "inactive");
+    indicator_case!(indicator_disabled_detected, "disabled");
+
+    #[test]
+    fn success_override_ok_true_is_not_error() {
+        assert!(!body_indicates_error(r#"{"ok": true}"#));
+    }
+
+    #[test]
+    fn success_override_success_true_is_not_error() {
+        assert!(!body_indicates_error(r#"{"success": true}"#));
+    }
+
+    #[test]
+    fn success_override_authenticated_true_is_not_error() {
+        assert!(!body_indicates_error(r#"{"authenticated": true}"#));
+    }
+
+    #[test]
+    fn success_override_valid_true_is_not_error() {
+        assert!(!body_indicates_error(r#"{"valid": true}"#));
+    }
+
     #[test]
     fn body_indicates_error_ignores_indicator_inside_string_values() {
         assert!(!body_indicates_error(
@@ -1812,6 +1870,41 @@ mod tests {
         };
         assert!(!evaluate_success(&spec, 429, ""));
         assert!(evaluate_success(&spec, 200, ""));
+    }
+
+    #[test]
+    fn detector_timeout_override_takes_precedence() {
+        let spec = keyhog_core::VerifySpec {
+            method: HttpMethod::Get,
+            url: "https://example.com/verify".into(),
+            auth: AuthSpec::None,
+            headers: vec![],
+            body: None,
+            success: SuccessSpec {
+                status: Some(200),
+                status_not: None,
+                body_contains: None,
+                body_not_contains: None,
+                json_path: None,
+                equals: None,
+            },
+            metadata: vec![],
+            timeout_ms: Some(250),
+        };
+
+        assert_eq!(
+            verification_timeout(&spec, Duration::from_secs(5)),
+            Duration::from_millis(250)
+        );
+
+        let without_override = keyhog_core::VerifySpec {
+            timeout_ms: None,
+            ..spec
+        };
+        assert_eq!(
+            verification_timeout(&without_override, Duration::from_secs(5)),
+            Duration::from_secs(5)
+        );
     }
 
     #[test]

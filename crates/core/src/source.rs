@@ -1,9 +1,10 @@
 //! Source trait and chunk types: the abstraction for pluggable input backends.
 
+use serde::Serialize;
 use thiserror::Error;
 
 /// A scannable chunk of text with metadata about where it came from.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Chunk {
     /// UTF-8 text content to scan.
     pub data: String,
@@ -12,7 +13,7 @@ pub struct Chunk {
 }
 
 /// Metadata that tracks the source location for a scanned chunk.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ChunkMetadata {
     /// Logical source backend, such as `filesystem` or `git`.
     pub source_type: String,

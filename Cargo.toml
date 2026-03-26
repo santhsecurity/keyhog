@@ -32,6 +32,7 @@ tokio = { version = "1", features = ["full"] }
 
 # Pattern matching
 aho-corasick = "1"
+multimatch = { path = "../../libs/multimatch" }
 regex = "1"
 regex-syntax = "0.8"
 
@@ -50,7 +51,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # File system
-walkdir = "2"
+codewalk = { path = "../../libs/codewalk" }
 base64 = "0.22"
 unicode-normalization = "0.1"
 

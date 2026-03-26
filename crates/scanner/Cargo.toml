@@ -22,6 +22,7 @@ wgpu = { version = "24", optional = true }
 pollster = { version = "0.4", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 aho-corasick = { workspace = true }
+multimatch = { workspace = true }
 regex = { workspace = true }
 base64 = { workspace = true }
 unicode-normalization = { workspace = true }

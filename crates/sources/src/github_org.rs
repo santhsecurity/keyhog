@@ -160,7 +160,7 @@ fn send_github_request_with_backoff(
         ));
     }
 
-    return Err(SourceError::Other("GitHub API retry limit exceeded".into()));
+    Err(SourceError::Other("GitHub API retry limit exceeded".into()))
 }
 
 fn clone_repo(repo: &GitHubRepo, token: &str, clone_path: &Path) -> Result<(), SourceError> {
