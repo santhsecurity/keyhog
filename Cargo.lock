@@ -362,7 +362,6 @@ name = "codewalk"
 version = "0.1.1"
 dependencies = [
  "ignore",
- "memmap2",
  "serde",
  "toml",
 ]
