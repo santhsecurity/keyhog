@@ -12,10 +12,10 @@ readme.workspace = true
 [features]
 default = ["git", "web"]
 git = ["gix"]
-web = ["dep:reqwest", "dep:serde_json"]
-github = ["dep:reqwest", "dep:tempfile", "dep:serde", "dep:serde_json", "dep:base64"]
+web = ["dep:stealthreq", "dep:serde_json"]
+github = ["dep:stealthreq", "dep:tempfile", "dep:serde", "dep:serde_json", "dep:base64"]
 s3 = [
-    "dep:reqwest",
+    "dep:stealthreq",
     "dep:serde",
     "dep:quick-xml",
     "dep:urlencoding",
@@ -44,7 +44,7 @@ wait-timeout = { version = "0.2", optional = true }
 libc = "0.2"
 
 # GitHub feature dependencies
-reqwest = { workspace = true, features = ["blocking"], optional = true }
+stealthreq = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

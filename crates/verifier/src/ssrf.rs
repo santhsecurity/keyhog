@@ -1,6 +1,7 @@
 //! SSRF protection helpers for credential verification.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use stealthreq::http as reqwest;
 
 /// Check if a URL points to a private/internal network (SSRF protection).
 pub(crate) fn is_private_url(url: &str) -> bool {

@@ -602,7 +602,9 @@ mod tests {
     #[test]
     fn ghidra_not_found_returns_none() {
         // With an invalid GHIDRA_HOME, find should still return None gracefully
-        std::env::remove_var("GHIDRA_HOME");
+        unsafe {
+            std::env::remove_var("GHIDRA_HOME");
+        }
         // find_ghidra_headless should not panic
         let _ = find_ghidra_headless();
     }

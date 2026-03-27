@@ -28,6 +28,7 @@
 //! ```
 
 use keyhog_core::{Chunk, ChunkMetadata, Source, SourceError};
+use stealthreq::http as reqwest;
 
 /// Minimum printable string length for WASM binary string extraction.
 const MIN_WASM_STRING_LEN: usize = 8;

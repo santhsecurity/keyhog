@@ -12,11 +12,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT" /></a>
   <a href="https://github.com/santhsecurity/keyhog/actions"><img src="https://img.shields.io/github/actions/workflow/status/santhsecurity/keyhog/keyhog.yml?style=flat-square&label=CI" alt="CI" /></a>
   <a href="#performance"><img src="https://img.shields.io/badge/throughput-50_MB%2Fs-22C55E?style=flat-square" alt="50 MB/s" /></a>
-  <a href="#feature-comparison"><img src="https://img.shields.io/badge/detectors-886+-F59E0B?style=flat-square" alt="886+ detectors" /></a>
+  <a href="#feature-comparison"><img src="https://img.shields.io/badge/detectors-887+-F59E0B?style=flat-square" alt="887+ detectors" /></a>
 </p>
 
 <p align="center">
-  886 detectors · ML-scored confidence · decode-through scanning · live verification<br/>
+  887 detectors · ML-scored confidence · decode-through scanning · live verification<br/>
   <strong>Finds base64-encoded, hex-wrapped, and nested secrets that regex-only scanners miss entirely.</strong>
 </p>
 
@@ -30,7 +30,7 @@ $ keyhog scan --path .
   █████   █████      ████   ███████ ██    ██ ██   ███
   ██  ██  ██          ██    ██   ██ ██    ██ ██    ██
   ██   ██ ████████    ██    ██   ██  ██████   ██████
-  v1.0.0 · Secret Scanner · 886 detectors
+   v0.2.0 · Secret Scanner · 887 detectors
   by SanthSecurity
 
   critical  82%  ██████░░  GitHub Classic PAT
@@ -57,7 +57,7 @@ Most secret scanners run regex against plaintext. They miss anything encoded, em
 
 | | **KeyHog** | TruffleHog | Gitleaks | Semgrep |
 |---|:---:|:---:|:---:|:---:|
-| **Detectors** | **886+** | 800+ | 150+ | Rules |
+| **Detectors** | **887+** | 800+ | 150+ | Rules |
 | **Recall** *(blind test)* | **98%** | 32% | ~30% | ~40% |
 | **False positives** | **Zero** | Moderate | Low | High |
 | **Base64 decode** | ✓ | ✗ | ✗ | ✗ |
@@ -111,10 +111,10 @@ cargo install --path crates/cli
 
 ```toml
 [dependencies]
-keyhog-core = "0.1.0"
-keyhog-scanner = "0.1.0"
-keyhog-sources = "0.1.0"
-keyhog-verifier = "0.1.0"
+keyhog-core = "0.2"
+keyhog-scanner = "0.2"
+keyhog-sources = "0.2"
+keyhog-verifier = "0.2"
 ```
 
 - `keyhog-core` provides detector specs, findings, reporting, and allowlists.
@@ -180,9 +180,9 @@ docker run --rm -v $(pwd):/scan ghcr.io/keyhog/keyhog:latest scan --path /scan
 ```yaml
 repos:
   - repo: https://github.com/santhsecurity/keyhog
-    rev: v0.1.0
+    rev: v0.2.0
     hooks:
-      - id: keyhog-secret-scan
+      - id: keyhog
 ```
 
 ## Usage
@@ -359,7 +359,7 @@ All benchmarks: AMD Ryzen 9 5900X, 32 GB RAM, NVMe SSD.
 |-----------|------|-------|--------|
 | 100 | 55 MB/s | 58 MB/s | 62 MB/s |
 | 500 | 48 MB/s | 52 MB/s | 56 MB/s |
-| 886 | 42 MB/s | 46 MB/s | 50 MB/s |
+| 887 | 42 MB/s | 46 MB/s | 50 MB/s |
 
 ### Real-World Repos
 

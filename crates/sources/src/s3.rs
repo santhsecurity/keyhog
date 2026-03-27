@@ -10,9 +10,10 @@ use keyhog_core::{Chunk, ChunkMetadata, Source, SourceError};
 use quick_xml::Reader;
 use quick_xml::de::{Deserializer, PredefinedEntityResolver};
 use quick_xml::events::Event;
-use reqwest::blocking::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use stealthreq::http::{self as reqwest};
+use stealthreq::http::blocking::Client;
 
 const DEFAULT_S3_HOST_SUFFIX: &str = "s3.amazonaws.com";
 const S3_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);

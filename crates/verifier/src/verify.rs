@@ -18,7 +18,7 @@ use keyhog_core::{
     AuthSpec, DetectorSpec, HttpMethod, MetadataSpec, SuccessSpec, VerificationResult,
     VerifiedFinding,
 };
-use reqwest::Client;
+use stealthreq::http::{self as reqwest, Client};
 use tokio::sync::Notify;
 use tokio::task::JoinSet;
 
@@ -553,6 +553,7 @@ async fn resolved_client_for_url(
     })
 }
 
+#[allow(clippy::large_enum_variant)]
 enum RequestBuildResult {
     Ready(reqwest::RequestBuilder),
     Final(VerificationResult, HashMap<String, String>),
@@ -2206,7 +2207,7 @@ mod tests {
         let spec = SuccessSpec {
             status: Some(200),
             status_not: None,
-            body_contains: Some(credential.into()),
+            body_contains: Some(credential),
             body_not_contains: None,
             json_path: None,
             equals: None,

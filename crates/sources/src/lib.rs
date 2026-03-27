@@ -4,6 +4,11 @@
 //! values for the scanner. Sources are gated behind cargo features so only the
 //! transitive dependencies you actually need are compiled.
 
+/// Local HTTP compatibility shim backed by `stealthreq`.
+pub mod reqwest {
+    pub use stealthreq::http::*;
+}
+
 #[cfg(feature = "binary")]
 mod binary;
 #[cfg(feature = "docker")]

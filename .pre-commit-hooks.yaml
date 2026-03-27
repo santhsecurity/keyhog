@@ -1,0 +1,32 @@
+# Pre-commit hook definitions for KeyHog.
+#
+# Usage in your project's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/santhsecurity/keyhog
+#       rev: v0.2.0
+#       hooks:
+#         - id: keyhog
+#
+# To scan only staged changes (fastest, recommended for commits):
+#
+#   repos:
+#     - repo: https://github.com/santhsecurity/keyhog
+#       rev: v0.2.0
+#       hooks:
+#         - id: keyhog-diff
+
+- id: keyhog
+  name: KeyHog Secret Scanner
+  description: Scan files for leaked credentials, API keys, and secrets.
+  entry: keyhog scan --fast --severity high --format text --path
+  language: rust
+  types_or: [text, binary]
+
+- id: keyhog-diff
+  name: KeyHog Secret Scanner (diff only)
+  description: Scan only staged git changes for leaked secrets.
+  entry: keyhog scan --fast --severity high --git-diff HEAD
+  language: rust
+  pass_filenames: false
+  always_run: true

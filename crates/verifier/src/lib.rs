@@ -2,6 +2,11 @@
 //! active by making HTTP requests to the service's API endpoint as specified in
 //! each detector's `[detector.verify]` configuration.
 
+/// Local HTTP compatibility shim backed by `stealthreq`.
+pub mod reqwest {
+    pub use stealthreq::http::*;
+}
+
 /// Shared in-memory verification cache.
 pub mod cache;
 mod interpolate;
@@ -21,7 +26,7 @@ use keyhog_core::{
 // Re-export dedup types from core so existing consumers (`use keyhog_verifier::DedupedMatch`)
 // continue to work without source changes.
 pub use keyhog_core::{DedupScope, dedup_matches};
-use reqwest::Client;
+use crate::reqwest::{BuildError as HttpBuildError, Client, Error as ReqwestError};
 use thiserror::Error;
 use tokio::sync::{Notify, Semaphore};
 
@@ -40,11 +45,11 @@ pub enum VerifyError {
     #[error(
         "failed to send HTTP request: {0}. Fix: check network access, proxy settings, and the verification endpoint"
     )]
-    Http(#[from] reqwest::Error),
+    Http(#[from] ReqwestError),
     #[error(
         "failed to build configured HTTP client: {0}. Fix: use a valid timeout and supported TLS/network configuration"
     )]
-    ClientBuild(reqwest::Error),
+    ClientBuild(HttpBuildError),
     #[error(
         "failed to resolve verification field: {0}. Fix: use `match` or `companion.<name>` fields that exist in the detector spec"
     )]
@@ -786,16 +791,14 @@ mod tests {
 
         // Test status_matches logic manually
         fn status_matches(status: Option<u16>, status_not: Option<u16>, code: u16) -> bool {
-            if let Some(expected) = status {
-                if code != expected {
+            if let Some(expected) = status
+                && code != expected {
                     return false;
                 }
-            }
-            if let Some(not_expected) = status_not {
-                if code == not_expected {
+            if let Some(not_expected) = status_not
+                && code == not_expected {
                     return false;
                 }
-            }
             true
         }
 
@@ -1083,7 +1086,7 @@ mod tests {
         // Use a low per-service concurrency limit
         let per_service_limit = 5;
         let engine = VerificationEngine::new(
-            &[detector.clone()],
+            std::slice::from_ref(&detector),
             VerifyConfig {
                 timeout: Duration::from_secs(5),
                 max_concurrent_per_service: per_service_limit,

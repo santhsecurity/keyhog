@@ -15,7 +15,7 @@ live = []
 
 [dependencies]
 keyhog-core = { workspace = true }
-reqwest = { workspace = true }
+stealthreq = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

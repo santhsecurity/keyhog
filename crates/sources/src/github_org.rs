@@ -10,9 +10,9 @@ use std::time::{Duration, Instant};
 
 use keyhog_core::{Chunk, ChunkMetadata, Source, SourceError};
 use regex::Regex;
-use reqwest::blocking::Client;
-use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use serde::Deserialize;
+use stealthreq::http::blocking::Client;
+use stealthreq::http::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 
 use crate::FilesystemSource;
 
@@ -142,7 +142,7 @@ fn send_github_request_with_backoff(
     client: &Client,
     org: &str,
     page: usize,
-) -> Result<reqwest::blocking::Response, SourceError> {
+) -> Result<stealthreq::http::blocking::Response, SourceError> {
     const MAX_ATTEMPTS: usize = 4;
 
     for attempt in 0..MAX_ATTEMPTS {
