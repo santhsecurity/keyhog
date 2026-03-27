@@ -16,15 +16,36 @@ pub use sarif::SarifReporter;
 pub use text::TextReporter;
 
 /// Errors emitted while writing scanner reports.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::ReportError;
+///
+/// let error = ReportError::Io(std::io::Error::other("disk full"));
+/// assert!(error.to_string().contains("Fix"));
+/// ```
 #[derive(Debug, Error)]
 pub enum ReportError {
-    #[error("failed to write report: {0}")]
+    #[error("failed to write report: {0}. Fix: choose a writable output path or write to stdout")]
     Io(#[from] std::io::Error),
-    #[error("failed to serialize report: {0}")]
+    #[error(
+        "failed to serialize report: {0}. Fix: switch to a simpler format or report this as a serialization bug"
+    )]
     Serialize(#[from] serde_json::Error),
 }
 
 /// Trait implemented by all finding reporters.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{JsonlReporter, Reporter};
+///
+/// let mut out = Vec::new();
+/// let mut reporter = JsonlReporter::new(&mut out);
+/// reporter.finish().unwrap();
+/// ```
 pub trait Reporter {
     /// Emit one finding into the report stream.
     fn report(&mut self, finding: &crate::VerifiedFinding) -> Result<(), ReportError>;
@@ -33,12 +54,28 @@ pub trait Reporter {
 }
 
 /// Factory used to build dynamically registered reporters.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{JsonReporter, ReporterFactory};
+///
+/// let _factory: ReporterFactory = Box::new(|writer| Box::new(JsonReporter::new(writer)));
+/// ```
 pub type ReporterFactory =
     Box<dyn Fn(Box<dyn std::io::Write + Send + 'static>) -> Box<dyn Reporter> + Send + Sync>;
 
 static REPORTER_REGISTRY: OnceLock<RwLock<HashMap<String, ReporterFactory>>> = OnceLock::new();
 
 /// Register a named reporter factory for custom output formats.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{JsonReporter, register_reporter};
+///
+/// register_reporter("json-copy", Box::new(|writer| Box::new(JsonReporter::new(writer))));
+/// ```
 pub fn register_reporter(name: &str, factory: ReporterFactory) {
     let Ok(mut registry) = REPORTER_REGISTRY
         .get_or_init(|| RwLock::new(HashMap::new()))
@@ -51,6 +88,16 @@ pub fn register_reporter(name: &str, factory: ReporterFactory) {
 }
 
 /// Build a previously registered custom reporter by name.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{JsonReporter, make_custom_reporter, register_reporter};
+///
+/// register_reporter("json-copy-lookup", Box::new(|writer| Box::new(JsonReporter::new(writer))));
+/// let reporter = make_custom_reporter("json-copy-lookup", Box::new(Vec::new()));
+/// assert!(reporter.is_some());
+/// ```
 pub fn make_custom_reporter(
     name: &str,
     w: Box<dyn std::io::Write + Send + 'static>,

@@ -6,6 +6,17 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Scans git history commit-by-commit using patch output and extracts added lines.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Source;
+/// use keyhog_sources::GitHistorySource;
+/// use std::path::PathBuf;
+///
+/// let source = GitHistorySource::new(PathBuf::from(".")).with_max_commits(25);
+/// assert_eq!(source.name(), "git-history");
+/// ```
 pub struct GitHistorySource {
     repo_path: PathBuf,
     max_commits: Option<usize>,
@@ -13,6 +24,17 @@ pub struct GitHistorySource {
 
 impl GitHistorySource {
     /// Create a source that scans commit history patches for added lines.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::GitHistorySource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = GitHistorySource::new(PathBuf::from("."));
+    /// assert_eq!(source.name(), "git-history");
+    /// ```
     pub fn new(repo_path: PathBuf) -> Self {
         Self {
             repo_path,
@@ -21,6 +43,17 @@ impl GitHistorySource {
     }
 
     /// Limit how many commits are traversed from `HEAD`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::GitHistorySource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = GitHistorySource::new(PathBuf::from(".")).with_max_commits(2);
+    /// assert_eq!(source.name(), "git-history");
+    /// ```
     pub fn with_max_commits(mut self, n: usize) -> Self {
         self.max_commits = Some(n);
         self

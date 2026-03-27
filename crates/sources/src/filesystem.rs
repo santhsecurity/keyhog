@@ -11,6 +11,17 @@ use std::path::PathBuf;
 const MMAP_THRESHOLD: u64 = 4096;
 
 /// Scans files in a directory tree.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Source;
+/// use keyhog_sources::FilesystemSource;
+/// use std::path::PathBuf;
+///
+/// let source = FilesystemSource::new(PathBuf::from(".")).with_max_file_size(1024 * 1024);
+/// assert_eq!(source.name(), "filesystem");
+/// ```
 pub struct FilesystemSource {
     root: PathBuf,
     max_file_size: u64,
@@ -18,6 +29,17 @@ pub struct FilesystemSource {
 
 impl FilesystemSource {
     /// Create a filesystem source rooted at `root`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::FilesystemSource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = FilesystemSource::new(PathBuf::from("."));
+    /// assert_eq!(source.name(), "filesystem");
+    /// ```
     pub fn new(root: PathBuf) -> Self {
         Self {
             root,
@@ -26,6 +48,17 @@ impl FilesystemSource {
     }
 
     /// Override the maximum file size scanned from disk.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::FilesystemSource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = FilesystemSource::new(PathBuf::from(".")).with_max_file_size(4096);
+    /// assert_eq!(source.name(), "filesystem");
+    /// ```
     pub fn with_max_file_size(mut self, bytes: u64) -> Self {
         self.max_file_size = bytes;
         self
@@ -67,7 +100,9 @@ impl Source for FilesystemSource {
         let max_size = self.max_file_size;
         let entries = match CodeWalker::new(&self.root, walker_config(self.max_file_size)).walk() {
             Ok(entries) => entries,
-            Err(error) => return Box::new(std::iter::once(Err(SourceError::Io(error)))),
+            Err(error) => {
+                return Box::new(std::iter::once(Err(SourceError::Other(error.to_string()))));
+            }
         };
 
         Box::new(entries.into_iter().filter_map(move |entry| {
@@ -155,8 +190,6 @@ fn walker_config(max_file_size: u64) -> WalkConfig {
         .skip_binary(false)
         .exclude_extensions(exclude_extensions)
         .exclude_dirs(exclude_dirs)
-        .mmap_threshold(MMAP_THRESHOLD)
-        .use_mmap(true)
 }
 
 /// Read a small file safely (preventing TOCTOU symlink attacks).

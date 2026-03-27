@@ -21,6 +21,8 @@ mod github_org;
 mod s3;
 mod stdin;
 mod strings;
+#[cfg(feature = "web")]
+mod web;
 
 #[cfg(feature = "binary")]
 pub use binary::BinarySource;
@@ -38,3 +40,5 @@ pub use github_org::GitHubOrgSource;
 #[cfg(feature = "s3")]
 pub use s3::S3Source;
 pub use stdin::StdinSource;
+#[cfg(feature = "web")]
+pub use web::WebSource;

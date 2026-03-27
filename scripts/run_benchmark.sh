@@ -24,7 +24,7 @@ echo ""
 
 # Build keyhog in release mode
 echo -e "${YELLOW}Building keyhog (release)...${NC}"
-cargo build --release --manifest-path "${ROOT_DIR}/Cargo.toml" -p keyhog-cli 2>/dev/null
+cargo build --release --manifest-path "${ROOT_DIR}/Cargo.toml" -p keyhog 2>/dev/null
 echo -e "${GREEN}✓ keyhog built${NC}"
 
 # Check trufflehog availability

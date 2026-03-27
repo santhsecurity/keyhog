@@ -14,6 +14,16 @@ use keyhog_core::VerificationResult;
 use sha2::{Digest, Sha256};
 
 /// Bounded in-memory cache for verification outcomes.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_verifier::cache::VerificationCache;
+/// use std::time::Duration;
+///
+/// let cache = VerificationCache::new(Duration::from_secs(60));
+/// assert!(cache.is_empty());
+/// ```
 pub struct VerificationCache {
     entries: DashMap<CacheKey, CacheEntry>,
     inserts: AtomicUsize,
@@ -45,11 +55,31 @@ impl VerificationCache {
     const MAX_METADATA_VALUE_BYTES: usize = 256;
 
     /// Create a new cache with the given TTL.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_verifier::cache::VerificationCache;
+    /// use std::time::Duration;
+    ///
+    /// let cache = VerificationCache::new(Duration::from_secs(60));
+    /// assert!(cache.is_empty());
+    /// ```
     pub fn new(ttl: Duration) -> Self {
         Self::with_max_entries(ttl, Self::DEFAULT_MAX_ENTRIES)
     }
 
     /// Create a new cache with the given TTL and an explicit size bound.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_verifier::cache::VerificationCache;
+    /// use std::time::Duration;
+    ///
+    /// let cache = VerificationCache::with_max_entries(Duration::from_secs(60), 32);
+    /// assert!(cache.is_empty());
+    /// ```
     pub fn with_max_entries(ttl: Duration, max_entries: usize) -> Self {
         Self {
             entries: DashMap::new(),
@@ -60,11 +90,33 @@ impl VerificationCache {
     }
 
     /// Default cache: 5 minute TTL.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_verifier::cache::VerificationCache;
+    ///
+    /// let cache = VerificationCache::default_ttl();
+    /// assert!(cache.is_empty());
+    /// ```
     pub fn default_ttl() -> Self {
         Self::new(Duration::from_secs(Self::DEFAULT_TTL_SECS))
     }
 
     /// Look up a cached result.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::VerificationResult;
+    /// use keyhog_verifier::cache::VerificationCache;
+    /// use std::collections::HashMap;
+    /// use std::time::Duration;
+    ///
+    /// let cache = VerificationCache::new(Duration::from_secs(60));
+    /// cache.put("secret", "detector", VerificationResult::Live, HashMap::new());
+    /// assert!(cache.get("secret", "detector").is_some());
+    /// ```
     pub fn get(
         &self,
         credential: &str,
@@ -95,6 +147,19 @@ impl VerificationCache {
     }
 
     /// Store a verification result.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::VerificationResult;
+    /// use keyhog_verifier::cache::VerificationCache;
+    /// use std::collections::HashMap;
+    /// use std::time::Duration;
+    ///
+    /// let cache = VerificationCache::new(Duration::from_secs(60));
+    /// cache.put("secret", "detector", VerificationResult::Live, HashMap::new());
+    /// assert_eq!(cache.len(), 1);
+    /// ```
     pub fn put(
         &self,
         credential: &str,
@@ -127,16 +192,47 @@ impl VerificationCache {
     }
 
     /// Number of cached entries.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_verifier::cache::VerificationCache;
+    /// use std::time::Duration;
+    ///
+    /// let cache = VerificationCache::new(Duration::from_secs(60));
+    /// assert_eq!(cache.len(), 0);
+    /// ```
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Return `true` when the cache contains no live entries.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_verifier::cache::VerificationCache;
+    /// use std::time::Duration;
+    ///
+    /// let cache = VerificationCache::new(Duration::from_secs(60));
+    /// assert!(cache.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
     /// Evict expired entries.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_verifier::cache::VerificationCache;
+    /// use std::time::Duration;
+    ///
+    /// let cache = VerificationCache::new(Duration::from_secs(60));
+    /// cache.evict_expired();
+    /// assert!(cache.is_empty());
+    /// ```
     pub fn evict_expired(&self) {
         let now = Instant::now();
         // Security boundary: TTL cleanup prevents stale entries from turning the

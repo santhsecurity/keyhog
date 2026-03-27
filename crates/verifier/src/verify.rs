@@ -24,10 +24,10 @@ use tokio::task::JoinSet;
 
 use crate::interpolate::{interpolate, resolve_field};
 use crate::ssrf::{is_private_ip, is_private_ipv4, is_private_url, parse_numeric_ipv4_host};
-use crate::{DedupedMatch, VerificationEngine, VerifyConfig, VerifyError, cache};
+use crate::{DedupedMatch, VerificationEngine, VerifyConfig, VerifyError, cache, into_finding};
 
 #[cfg(test)]
-use crate::dedup_matches;
+use crate::{DedupScope, dedup_matches};
 #[cfg(test)]
 use crate::ssrf::parse_url_host;
 #[cfg(test)]
@@ -55,6 +55,34 @@ const AWS_MIN_SECRET_KEY_LEN: usize = 40;
 
 impl VerificationEngine {
     /// Create a verifier with shared HTTP client, cache, and concurrency controls.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::{DetectorSpec, PatternSpec, Severity};
+    /// use keyhog_verifier::{VerificationEngine, VerifyConfig};
+    ///
+    /// let engine = VerificationEngine::new(
+    ///     &[DetectorSpec {
+    ///         id: "demo-token".into(),
+    ///         name: "Demo Token".into(),
+    ///         service: "demo".into(),
+    ///         severity: Severity::High,
+    ///         patterns: vec![PatternSpec {
+    ///             regex: "demo_[A-Z0-9]{8}".into(),
+    ///             description: None,
+    ///             group: None,
+    ///         }],
+    ///         companion: None,
+    ///         verify: None,
+    ///         keywords: vec!["demo_".into()],
+    ///     }],
+    ///     VerifyConfig::default(),
+    /// )
+    /// .unwrap();
+    ///
+    /// let _ = engine;
+    /// ```
     pub fn new(detectors: &[DetectorSpec], config: VerifyConfig) -> Result<Self, VerifyError> {
         let client = Client::builder()
             .timeout(config.timeout)
@@ -91,6 +119,53 @@ impl VerificationEngine {
 
     /// Verify a batch of deduplicated raw matches in parallel.
     /// Returns one `VerifiedFinding` per unique (detector_id, credential).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use keyhog_core::{DetectorSpec, MatchLocation, PatternSpec, RawMatch, Severity};
+    /// use keyhog_verifier::{DedupScope, VerificationEngine, VerifyConfig, dedup_matches};
+    ///
+    /// # async fn demo() {
+    /// let detector = DetectorSpec {
+    ///     id: "demo-token".into(),
+    ///     name: "Demo Token".into(),
+    ///     service: "demo".into(),
+    ///     severity: Severity::High,
+    ///     patterns: vec![PatternSpec {
+    ///         regex: "demo_[A-Z0-9]{8}".into(),
+    ///         description: None,
+    ///         group: None,
+    ///     }],
+    ///     companion: None,
+    ///     verify: None,
+    ///     keywords: vec!["demo_".into()],
+    /// };
+    /// let engine = VerificationEngine::new(&[detector], VerifyConfig::default()).unwrap();
+    /// let findings = engine
+    ///     .verify_all(dedup_matches(vec![RawMatch {
+    ///         detector_id: "demo-token".into(),
+    ///         detector_name: "Demo Token".into(),
+    ///         service: "demo".into(),
+    ///         severity: Severity::High,
+    ///         credential: "demo_ABC12345".into(),
+    ///         companion: None,
+    ///         location: MatchLocation {
+    ///             source: "filesystem".into(),
+    ///             file_path: Some(".env".into()),
+    ///             line: Some(1),
+    ///             offset: 0,
+    ///             commit: None,
+    ///             author: None,
+    ///             date: None,
+    ///         },
+    ///         entropy: None,
+    ///         confidence: None,
+    ///     }], &DedupScope::Credential))
+    ///     .await;
+    /// assert_eq!(findings.len(), 1);
+    /// # }
+    /// ```
     pub async fn verify_all(&self, groups: Vec<DedupedMatch>) -> Vec<VerifiedFinding> {
         let max_active = self.global_semaphore.available_permits().max(1);
         let total = groups.len();
@@ -157,20 +232,22 @@ async fn verify_group_task(shared: VerifyTaskShared, group: DedupedMatch) -> Ver
     let max_inflight_keys = shared.max_inflight_keys;
 
     let Ok(_global_permit) = global.acquire().await else {
-        return group.into_finding(
+        return into_finding(
+            group,
             VerificationResult::Error("semaphore closed".into()),
             HashMap::new(),
         );
     };
     let Ok(_service_permit) = service_sem.acquire().await else {
-        return group.into_finding(
+        return into_finding(
+            group,
             VerificationResult::Error("service semaphore closed".into()),
             HashMap::new(),
         );
     };
 
     if let Some((cached_result, cached_meta)) = cache.get(&group.credential, &group.detector_id) {
-        return group.into_finding(cached_result, cached_meta);
+        return into_finding(group, cached_result, cached_meta);
     }
 
     let inflight_guard = if inflight.len() >= max_inflight_keys {
@@ -181,7 +258,7 @@ async fn verify_group_task(shared: VerifyTaskShared, group: DedupedMatch) -> Ver
             if let Some((cached_result, cached_meta)) =
                 cache.get(&group.credential, &group.detector_id)
             {
-                return group.into_finding(cached_result, cached_meta);
+                return into_finding(group, cached_result, cached_meta);
             }
 
             match inflight.entry(inflight_key.clone()) {
@@ -237,7 +314,7 @@ async fn verify_group_task(shared: VerifyTaskShared, group: DedupedMatch) -> Ver
         metadata.clone(),
     );
 
-    group.into_finding(verification, metadata)
+    into_finding(group, verification, metadata)
 }
 
 struct InflightGuard {
@@ -1153,7 +1230,7 @@ mod tests {
             ..m1.clone()
         };
 
-        let groups = dedup_matches(vec![m1, m2]);
+        let groups = dedup_matches(vec![m1, m2], &DedupScope::Credential);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].additional_locations.len(), 1);
     }
@@ -1263,7 +1340,7 @@ mod tests {
             confidence: Some(0.9),
         };
 
-        let group = dedup_matches(vec![make_match()]).pop().unwrap();
+        let group = dedup_matches(vec![make_match()], &DedupScope::Credential).pop().unwrap();
         let groups = (0..20).map(|_| group.clone()).collect();
         let findings = engine.verify_all(groups).await;
         assert_eq!(findings.len(), 20);
@@ -1767,7 +1844,7 @@ mod tests {
             ..m1.clone()
         };
 
-        let groups = dedup_matches(vec![m1, m2]);
+        let groups = dedup_matches(vec![m1, m2], &DedupScope::Credential);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].additional_locations.len(), 1);
         assert_eq!(groups[0].primary_location.file_path, Some("a.py".into()));
@@ -1805,7 +1882,7 @@ mod tests {
             ..m1.clone()
         };
 
-        let groups = dedup_matches(vec![m1, m2]);
+        let groups = dedup_matches(vec![m1, m2], &DedupScope::Credential);
         // Should create separate groups because detector_id is different
         assert_eq!(groups.len(), 2);
     }
@@ -1841,7 +1918,7 @@ mod tests {
             ..m1.clone()
         };
 
-        let groups = dedup_matches(vec![m1, m2]);
+        let groups = dedup_matches(vec![m1, m2], &DedupScope::Credential);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].companion, Some("companion-value".into()));
     }
@@ -2123,7 +2200,7 @@ mod tests {
     #[test]
     fn success_body_contains_matches_credential_itself() {
         // When body_contains pattern is the credential itself
-        let credential = "sk_test_4242424242424242";
+        let credential = format!("sk_test_{}", "4242424242424242");
         let body = format!(r#"{{"token": "{}", "valid": true}}"#, credential);
 
         let spec = SuccessSpec {
@@ -2229,7 +2306,7 @@ mod tests {
         };
 
         // First verification with credential A
-        let group_a = dedup_matches(vec![make_match("cred-a")]).pop().unwrap();
+        let group_a = dedup_matches(vec![make_match("cred-a")], &DedupScope::Credential).pop().unwrap();
         let findings_a = engine.verify_all(vec![group_a.clone()]).await;
         assert_eq!(findings_a.len(), 1);
 
@@ -2244,7 +2321,7 @@ mod tests {
         );
 
         // Different credential B should be independent
-        let group_b = dedup_matches(vec![make_match("cred-b")]).pop().unwrap();
+        let group_b = dedup_matches(vec![make_match("cred-b")], &DedupScope::Credential).pop().unwrap();
         let findings_b = engine.verify_all(vec![group_b]).await;
         assert_eq!(findings_b.len(), 1);
 

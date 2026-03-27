@@ -20,6 +20,23 @@ const HIGH_ENTROPY_THRESHOLD: f64 = 4.5;
 const VERY_HIGH_ENTROPY_THRESHOLD: f64 = 5.5;
 
 /// Confidence signals for a potential match.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::confidence::ConfidenceSignals;
+///
+/// let signals = ConfidenceSignals {
+///     has_literal_prefix: true,
+///     has_context_anchor: true,
+///     entropy: 5.0,
+///     keyword_nearby: true,
+///     sensitive_file: true,
+///     match_length: 32,
+///     has_companion: false,
+/// };
+/// assert!(signals.has_literal_prefix);
+/// ```
 pub struct ConfidenceSignals {
     /// Pattern has a distinctive literal prefix (e.g., sk-proj-, ghp_)
     pub has_literal_prefix: bool,
@@ -43,6 +60,23 @@ pub struct ConfidenceSignals {
 /// corpus before the scanner blends this heuristic score with the ML model:
 /// literal prefixes dominate, context and entropy are secondary, and file/path
 /// hints plus companion matches provide smaller incremental adjustments.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::confidence::{ConfidenceSignals, compute_confidence};
+///
+/// let score = compute_confidence(&ConfidenceSignals {
+///     has_literal_prefix: true,
+///     has_context_anchor: true,
+///     entropy: 5.0,
+///     keyword_nearby: true,
+///     sensitive_file: true,
+///     match_length: 32,
+///     has_companion: false,
+/// });
+/// assert!(score > 0.5);
+/// ```
 pub fn compute_confidence(signals: &ConfidenceSignals) -> f64 {
     let mut score = SCORE_ZERO;
     let mut max_possible = SCORE_ZERO;
@@ -107,6 +141,15 @@ pub fn compute_confidence(signals: &ConfidenceSignals) -> f64 {
 }
 
 /// Check if a file path suggests a sensitive file.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::confidence::is_sensitive_path;
+///
+/// assert!(is_sensitive_path(".env.production"));
+/// assert!(!is_sensitive_path("src/main.rs"));
+/// ```
 pub fn is_sensitive_path(path: &str) -> bool {
     let path_bytes = path.as_bytes();
     const SENSITIVE_NAMES: &[&[u8]] = &[

@@ -10,6 +10,15 @@ const MAX_REGEX_ALTERNATION_BRANCHES: usize = 64;
 const MAX_REGEX_REPEAT_BOUND: u32 = 10_000;
 
 /// Quality issue found in a detector spec.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::QualityIssue;
+///
+/// let issue = QualityIssue::Warning("add keywords".into());
+/// assert!(matches!(issue, QualityIssue::Warning(_)));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum QualityIssue {
     Error(String),
@@ -17,6 +26,29 @@ pub enum QualityIssue {
 }
 
 /// Validate a detector spec against the quality gate.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{DetectorSpec, PatternSpec, Severity, validate_detector};
+///
+/// let detector = DetectorSpec {
+///     id: "demo".into(),
+///     name: "Demo".into(),
+///     service: "demo".into(),
+///     severity: Severity::High,
+///     patterns: vec![PatternSpec {
+///         regex: "demo_[A-Z0-9]{8}".into(),
+///         description: None,
+///         group: None,
+///     }],
+///     companion: None,
+///     verify: None,
+///     keywords: vec!["demo_".into()],
+/// };
+///
+/// assert!(validate_detector(&detector).is_empty());
+/// ```
 pub fn validate_detector(spec: &DetectorSpec) -> Vec<QualityIssue> {
     let mut issues = Vec::new();
     validate_patterns_present(spec, &mut issues);

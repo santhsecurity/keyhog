@@ -11,6 +11,17 @@ const DEFAULT_GIT_DIR: &str = ".";
 /// Scans only the ADDED lines between two git refs.
 /// Uses `git diff` unified diff output and extracts lines starting with '+'.
 /// Useful for CI/CD pre-commit hooks and PR checks.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Source;
+/// use keyhog_sources::GitDiffSource;
+/// use std::path::PathBuf;
+///
+/// let source = GitDiffSource::new(PathBuf::from("."), "main").with_head_ref("HEAD");
+/// assert_eq!(source.name(), "git-diff");
+/// ```
 pub struct GitDiffSource {
     repo_path: PathBuf,
     base_ref: String,
@@ -19,6 +30,17 @@ pub struct GitDiffSource {
 
 impl GitDiffSource {
     /// Create a new diff source comparing `base_ref` to HEAD.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::GitDiffSource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = GitDiffSource::new(PathBuf::from("."), "origin/main");
+    /// assert_eq!(source.name(), "git-diff");
+    /// ```
     pub fn new(repo_path: PathBuf, base_ref: impl Into<String>) -> Self {
         Self {
             repo_path,
@@ -28,6 +50,17 @@ impl GitDiffSource {
     }
 
     /// Set a specific head ref to compare against (defaults to HEAD).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::GitDiffSource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = GitDiffSource::new(PathBuf::from("."), "main").with_head_ref("feature");
+    /// assert_eq!(source.name(), "git-diff");
+    /// ```
     pub fn with_head_ref(mut self, head_ref: impl Into<String>) -> Self {
         self.head_ref = Some(head_ref.into());
         self

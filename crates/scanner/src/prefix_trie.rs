@@ -23,6 +23,16 @@ struct TrieNode {
 /// Build a propagation table using a trie.
 /// Returns: for each AC pattern index, a list of other pattern indices
 /// whose prefix is a superstring.
+/// Build a prefix propagation table for literal-prefix expansion.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::prefix_trie::build_propagation_table;
+///
+/// let table = build_propagation_table(&["gh".into(), "ghp_".into()]);
+/// assert_eq!(table.len(), 2);
+/// ```
 pub fn build_propagation_table(prefixes: &[String]) -> Vec<Vec<usize>> {
     let mut root = TrieNode::default();
     for (idx, prefix) in prefixes.iter().enumerate() {

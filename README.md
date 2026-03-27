@@ -8,7 +8,7 @@
 <h3 align="center">The secret scanner that finds what others miss.</h3>
 
 <p align="center">
-  <a href="https://crates.io/crates/keyhog-cli"><img src="https://img.shields.io/crates/v/keyhog-cli?style=flat-square&color=D93025" alt="crates.io" /></a>
+  <a href="https://crates.io/crates/keyhog"><img src="https://img.shields.io/crates/v/keyhog?style=flat-square&color=D93025" alt="crates.io" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT" /></a>
   <a href="https://github.com/santhsecurity/keyhog/actions"><img src="https://img.shields.io/github/actions/workflow/status/santhsecurity/keyhog/keyhog.yml?style=flat-square&label=CI" alt="CI" /></a>
   <a href="#performance"><img src="https://img.shields.io/badge/throughput-50_MB%2Fs-22C55E?style=flat-square" alt="50 MB/s" /></a>
@@ -69,11 +69,18 @@ Most secret scanners run regex against plaintext. They miss anything encoded, em
 
 > KeyHog finds **74 credentials** that TruffleHog misses. TruffleHog finds **0** that KeyHog misses.
 
+### Choosing Between Alternatives
+
+- Use `KeyHog` when you need high recall on encoded secrets, embeddable Rust crates, and optional live verification.
+- Use `TruffleHog` when you prioritize its existing verification workflows over a lightweight Rust-native integration story.
+- Use `Gitleaks` when plaintext regex scanning is enough and you want a simpler rule engine.
+- Use `Semgrep` when your main goal is broad static analysis rather than secret-specific recall.
+
 ## Quick Start
 
 ```bash
 # Install
-cargo install keyhog-cli
+cargo install keyhog
 
 # Scan a directory
 keyhog scan --path .
@@ -86,6 +93,70 @@ keyhog scan --git ./repo
 
 # CI mode: only changed files, SARIF output
 keyhog scan --git-diff origin/main --format sarif --fail-on-findings
+```
+
+## Install
+
+```bash
+# Install the published CLI
+cargo install keyhog
+
+# Or build from source
+git clone https://github.com/santhsecurity/keyhog.git
+cd keyhog
+cargo install --path crates/cli
+```
+
+### Standalone Crates
+
+```toml
+[dependencies]
+keyhog-core = "0.1.0"
+keyhog-scanner = "0.1.0"
+keyhog-sources = "0.1.0"
+keyhog-verifier = "0.1.0"
+```
+
+- `keyhog-core` provides detector specs, findings, reporting, and allowlists.
+- `keyhog-scanner` compiles detectors and scans `Chunk` values.
+- `keyhog-sources` provides filesystem, stdin, git, Docker, S3, and binary inputs.
+- `keyhog-verifier` verifies deduplicated findings asynchronously.
+- `keyhog` is the end-user binary package.
+
+## Library Quick Start
+
+```rust
+use keyhog_core::{Chunk, ChunkMetadata, DetectorSpec, PatternSpec, Severity};
+use keyhog_scanner::CompiledScanner;
+
+let scanner = CompiledScanner::compile(vec![DetectorSpec {
+    id: "demo-token".into(),
+    name: "Demo Token".into(),
+    service: "demo".into(),
+    severity: Severity::High,
+    patterns: vec![PatternSpec {
+        regex: "demo_[A-Z0-9]{8}".into(),
+        description: None,
+        group: None,
+    }],
+    companion: None,
+    verify: None,
+    keywords: vec!["demo_".into()],
+}])?;
+
+let findings = scanner.scan(&Chunk {
+    data: "TOKEN=demo_ABC12345".into(),
+    metadata: ChunkMetadata {
+        source_type: "filesystem".into(),
+        path: Some(".env".into()),
+        commit: None,
+        author: None,
+        date: None,
+    },
+});
+
+assert_eq!(findings.len(), 1);
+# Ok::<(), keyhog_scanner::ScanError>(())
 ```
 
 ### Docker

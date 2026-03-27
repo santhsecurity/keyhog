@@ -10,6 +10,20 @@ use keyhog_core::{Chunk, ChunkMetadata};
 use std::collections::{HashSet, VecDeque};
 
 /// A trait for decoding chunks to find hidden secrets.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use keyhog_core::Chunk;
+/// use keyhog_scanner::decode::Decoder;
+///
+/// struct Passthrough;
+///
+/// impl Decoder for Passthrough {
+///     fn name(&self) -> &'static str { "passthrough" }
+///     fn decode_chunk(&self, chunk: &Chunk) -> Vec<Chunk> { vec![chunk.clone()] }
+/// }
+/// ```
 pub trait Decoder: Send + Sync {
     fn name(&self) -> &'static str;
     fn decode_chunk(&self, chunk: &Chunk) -> Vec<Chunk>;
@@ -299,6 +313,22 @@ fn get_decoders() -> &'static std::sync::RwLock<Vec<Box<dyn Decoder>>> {
 }
 
 /// Register a custom decoder that participates in decode-through scanning.
+/// Register a custom decode stage used by [`decode_chunk`].
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use keyhog_core::Chunk;
+/// use keyhog_scanner::decode::{Decoder, register_decoder};
+///
+/// struct Passthrough;
+/// impl Decoder for Passthrough {
+///     fn name(&self) -> &'static str { "passthrough" }
+///     fn decode_chunk(&self, chunk: &Chunk) -> Vec<Chunk> { vec![chunk.clone()] }
+/// }
+///
+/// register_decoder(Box::new(Passthrough));
+/// ```
 pub fn register_decoder(decoder: Box<dyn Decoder>) {
     let mut registry = get_decoders()
         .write()
@@ -324,6 +354,26 @@ const MAX_DECODE_DEPTH: usize = 2;
 /// Uses BFS with deduplication to avoid redundant decode–re-decode cycles.
 /// The search is bounded by [`MAX_DECODE_DEPTH`] to prevent combinatorial
 /// explosion on pathological inputs.
+/// Decode a chunk through all registered decoders and return derived chunks.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{Chunk, ChunkMetadata};
+/// use keyhog_scanner::decode::decode_chunk;
+///
+/// let chunk = Chunk {
+///     data: "ZGVtb19BQkMxMjM0NQ==".into(),
+///     metadata: ChunkMetadata {
+///         source_type: "example".into(),
+///         path: None,
+///         commit: None,
+///         author: None,
+///         date: None,
+///     },
+/// };
+/// assert!(!decode_chunk(&chunk).is_empty());
+/// ```
 pub fn decode_chunk(chunk: &Chunk) -> Vec<Chunk> {
     let mut decoded_chunks = Vec::new();
     let mut queue = VecDeque::from([(chunk.clone(), 0usize)]);

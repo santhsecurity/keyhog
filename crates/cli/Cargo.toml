@@ -1,33 +1,50 @@
 [package]
-name = "keyhog-cli"
+name = "keyhog"
 description = "CLI binary for the secret scanner"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
 
 [[bin]]
 name = "keyhog"
 path = "src/main.rs"
 
 [features]
-default = ["git", "keyhog-scanner/default"]
-fast = []  # Overrides scanner defaults to nothing
+# Default = full experience. Only gpu, simd, and binary (Ghidra) are opt-in
+# because they require heavy compile-time deps or system libraries.
+# cargo install keyhog gives you EVERYTHING else.
+default = [
+    "keyhog-scanner/default",  # ML, entropy, decode-through, multiline
+    "git",                      # Git source backends
+    "web",                      # URL scanning (JS/sourcemap/WASM)
+    "github",                   # GitHub org scanning
+    "s3",                       # S3 bucket scanning
+    "docker",                   # Docker image scanning
+    "verify",                   # Live credential verification
+]
+fast = []  # Override: pattern matching only, no ML/decode. For pre-commit hooks.
 full = [
     "keyhog-scanner/ml",
     "keyhog-scanner/entropy",
     "keyhog-scanner/decode",
     "keyhog-scanner/multiline",
+    "git", "web", "github", "s3", "docker",
     "verify",
+    "binary",
 ]
 git = ["keyhog-sources/git"]
 github = ["keyhog-sources/github"]
 s3 = ["keyhog-sources/s3"]
 docker = ["keyhog-sources/docker"]
-binary = ["keyhog-sources/binary"]
+binary = ["keyhog-sources/binary"]     # Ghidra decompiler (requires Ghidra installed)
+web = ["keyhog-sources/web"]
 verify = ["keyhog-verifier/live"]
-gpu = ["keyhog-scanner/gpu"]
-simd = ["keyhog-scanner/simd"]  # Vectorscan/Hyperscan SIMD regex (3-5x throughput)
+gpu = ["keyhog-scanner/gpu"]           # wgpu compute shader inference (heavy)
+simd = ["keyhog-scanner/simd"]         # Vectorscan/Hyperscan SIMD regex (system lib required)
 
 [dependencies]
 keyhog-core = { workspace = true }
@@ -44,5 +61,8 @@ toml = "0.8"
 serde = { workspace = true }
 
 [dev-dependencies]
+keyhog-core = { workspace = true }
+keyhog-scanner = { workspace = true, default-features = false }
+keyhog-sources = { workspace = true }
 serde_json = "1"
 tempfile = "3"

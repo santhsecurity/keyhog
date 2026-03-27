@@ -14,24 +14,69 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 use keyhog_core::{
-    DetectorSpec, MatchLocation, RawMatch, VerificationResult, VerifiedFinding, redact,
+    DedupedMatch, DetectorSpec, VerificationResult, VerifiedFinding,
+    redact,
 };
+
+// Re-export dedup types from core so existing consumers (`use keyhog_verifier::DedupedMatch`)
+// continue to work without source changes.
+pub use keyhog_core::{DedupScope, dedup_matches};
 use reqwest::Client;
 use thiserror::Error;
 use tokio::sync::{Notify, Semaphore};
 
 /// Errors returned while constructing or executing live verification.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_verifier::VerifyError;
+///
+/// let error = VerifyError::FieldResolution("missing companion.secret".into());
+/// assert!(error.to_string().contains("Fix"));
+/// ```
 #[derive(Debug, Error)]
 pub enum VerifyError {
-    #[error("failed to send HTTP request: {0}")]
+    #[error(
+        "failed to send HTTP request: {0}. Fix: check network access, proxy settings, and the verification endpoint"
+    )]
     Http(#[from] reqwest::Error),
-    #[error("failed to build configured HTTP client: {0}")]
+    #[error(
+        "failed to build configured HTTP client: {0}. Fix: use a valid timeout and supported TLS/network configuration"
+    )]
     ClientBuild(reqwest::Error),
-    #[error("failed to resolve verification field: {0}")]
+    #[error(
+        "failed to resolve verification field: {0}. Fix: use `match` or `companion.<name>` fields that exist in the detector spec"
+    )]
     FieldResolution(String),
 }
 
 /// Live-verification engine with shared client, cache, and concurrency limits.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{DetectorSpec, PatternSpec, Severity};
+/// use keyhog_verifier::{VerificationEngine, VerifyConfig};
+///
+/// let detectors = vec![DetectorSpec {
+///     id: "demo-token".into(),
+///     name: "Demo Token".into(),
+///     service: "demo".into(),
+///     severity: Severity::High,
+///     patterns: vec![PatternSpec {
+///         regex: "demo_[A-Z0-9]{8}".into(),
+///         description: None,
+///         group: None,
+///     }],
+///     companion: None,
+///     verify: None,
+///     keywords: vec!["demo_".into()],
+/// }];
+///
+/// let engine = VerificationEngine::new(&detectors, VerifyConfig::default()).unwrap();
+/// let _ = engine;
+/// ```
 pub struct VerificationEngine {
     client: Client,
     detectors: HashMap<String, DetectorSpec>,
@@ -48,6 +93,20 @@ pub struct VerificationEngine {
 }
 
 /// Runtime configuration for live verification.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_verifier::VerifyConfig;
+/// use std::time::Duration;
+///
+/// let config = VerifyConfig {
+///     timeout: Duration::from_secs(2),
+///     ..VerifyConfig::default()
+/// };
+///
+/// assert_eq!(config.timeout, Duration::from_secs(2));
+/// ```
 pub struct VerifyConfig {
     /// End-to-end timeout for one verification attempt.
     pub timeout: Duration,
@@ -70,88 +129,27 @@ impl Default for VerifyConfig {
     }
 }
 
-/// A group of raw matches with the same (detector_id, credential).
-#[derive(Clone)]
-pub struct DedupedMatch {
-    /// Stable detector identifier.
-    pub detector_id: String,
-    /// Human-readable detector name.
-    pub detector_name: String,
-    /// Service namespace associated with the detector.
-    pub service: String,
-    /// Severity preserved from the original match.
-    pub severity: keyhog_core::Severity,
-    /// Unredacted credential for verification.
-    pub credential: String,
-    /// Optional companion credential or nearby value.
-    pub companion: Option<String>,
-    /// Primary source location.
-    pub primary_location: MatchLocation,
-    /// Additional duplicate locations.
-    pub additional_locations: Vec<MatchLocation>,
-
-    /// Confidence score (0.0 - 1.0) combining entropy, keyword proximity, file type, etc.
-    pub confidence: Option<f64>,
-}
-
-impl DedupedMatch {
-    /// Convert this group into a `VerifiedFinding` with the given verification result.
-    /// Single construction point eliminates duplication across cache-hit, inflight-wait,
-    /// semaphore-error, and live-verification code paths.
-    fn into_finding(
-        self,
-        verification: VerificationResult,
-        metadata: HashMap<String, String>,
-    ) -> VerifiedFinding {
-        VerifiedFinding {
-            detector_id: self.detector_id,
-            detector_name: self.detector_name,
-            service: self.service,
-            severity: self.severity,
-            credential_redacted: redact(&self.credential),
-            location: self.primary_location,
-            verification,
-            metadata,
-            additional_locations: self.additional_locations,
-            confidence: self.confidence,
-        }
+/// Convert a [`DedupedMatch`] into a [`VerifiedFinding`] with the given verification result.
+///
+/// Single construction point eliminates duplication across cache-hit, inflight-wait,
+/// semaphore-error, and live-verification code paths.
+pub(crate) fn into_finding(
+    group: DedupedMatch,
+    verification: VerificationResult,
+    metadata: HashMap<String, String>,
+) -> VerifiedFinding {
+    VerifiedFinding {
+        detector_id: group.detector_id,
+        detector_name: group.detector_name,
+        service: group.service,
+        severity: group.severity,
+        credential_redacted: redact(&group.credential),
+        location: group.primary_location,
+        verification,
+        metadata,
+        additional_locations: group.additional_locations,
+        confidence: group.confidence,
     }
-}
-
-/// Deduplicate raw matches: group by (detector_id, credential), merge locations.
-pub fn dedup_matches(matches: Vec<RawMatch>) -> Vec<DedupedMatch> {
-    let mut groups: HashMap<(String, String), DedupedMatch> = HashMap::new();
-
-    for m in matches {
-        let key = m.deduplication_key();
-        match groups.get_mut(&key) {
-            Some(existing) => {
-                existing.additional_locations.push(m.location);
-                // Keep the companion if we found one.
-                if existing.companion.is_none() && m.companion.is_some() {
-                    existing.companion = m.companion;
-                }
-            }
-            None => {
-                groups.insert(
-                    key,
-                    DedupedMatch {
-                        detector_id: m.detector_id,
-                        detector_name: m.detector_name,
-                        service: m.service,
-                        severity: m.severity,
-                        credential: m.credential,
-                        companion: m.companion,
-                        primary_location: m.location,
-                        additional_locations: Vec::new(),
-                        confidence: m.confidence,
-                    },
-                );
-            }
-        }
-    }
-
-    groups.into_values().collect()
 }
 
 #[cfg(test)]
@@ -373,8 +371,8 @@ mod tests {
         }
 
         // Original credential and its base64 encoding
-        let original_cred = "sk_live_4242424242424242";
-        let base64_encoded = base64_encode(original_cred);
+        let original_cred = format!("sk_live_{}", "4242424242424242");
+        let base64_encoded = base64_encode(&original_cred);
 
         // The base64 version should be treated as a distinct credential
         assert_ne!(
@@ -383,7 +381,7 @@ mod tests {
         );
 
         // Verify they interpolate differently
-        let interpolated_original = interpolate("{{match}}", original_cred, None);
+        let interpolated_original = interpolate("{{match}}", &original_cred, None);
         let interpolated_base64 = interpolate("{{match}}", &base64_encoded, None);
 
         assert_ne!(
@@ -654,8 +652,8 @@ mod tests {
         let match1 = make_match(&detector1);
         let match2 = make_match(&detector2);
 
-        let group1 = dedup_matches(vec![match1]).pop().unwrap();
-        let group2 = dedup_matches(vec![match2]).pop().unwrap();
+        let group1 = dedup_matches(vec![match1], &DedupScope::Credential).pop().unwrap();
+        let group2 = dedup_matches(vec![match2], &DedupScope::Credential).pop().unwrap();
 
         // Verify both simultaneously
         let findings = engine.verify_all(vec![group1, group2]).await;
@@ -1117,7 +1115,7 @@ mod tests {
                 entropy: None,
                 confidence: Some(0.9),
             };
-            groups.push(dedup_matches(vec![m]).pop().unwrap());
+            groups.push(dedup_matches(vec![m], &DedupScope::Credential).pop().unwrap());
         }
 
         // Process all 100 concurrently
@@ -1221,7 +1219,7 @@ mod tests {
             confidence: Some(0.9),
         };
 
-        let group = dedup_matches(vec![m]).pop().unwrap();
+        let group = dedup_matches(vec![m], &DedupScope::Credential).pop().unwrap();
 
         // Should complete (with error/timeout) rather than hanging forever
         let start = std::time::Instant::now();

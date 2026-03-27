@@ -26,12 +26,34 @@ const GHIDRA_TIMEOUT_SECS: u64 = 300;
 /// Maximum decompiled output size we'll process (50 MB).
 const MAX_DECOMPILED_SIZE: u64 = 50 * 1024 * 1024;
 
+/// Binary analysis source for executables and shared libraries.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Source;
+/// use keyhog_sources::BinarySource;
+///
+/// let source = BinarySource::strings_only("target/app");
+/// assert_eq!(source.name(), "binary");
+/// ```
 pub struct BinarySource {
     path: PathBuf,
     ghidra_path: Option<PathBuf>,
 }
 
 impl BinarySource {
+    /// Create a binary source and auto-detect Ghidra when available.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::BinarySource;
+    ///
+    /// let source = BinarySource::new("target/app");
+    /// assert_eq!(source.name(), "binary");
+    /// ```
     pub fn new(path: impl Into<PathBuf>) -> Self {
         let ghidra_path = find_ghidra_headless();
         Self {
@@ -41,12 +63,33 @@ impl BinarySource {
     }
 
     /// Explicitly set the Ghidra analyzeHeadless path.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::BinarySource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = BinarySource::new("target/app").with_ghidra(PathBuf::from("/opt/ghidra/support/analyzeHeadless"));
+    /// assert_eq!(source.name(), "binary");
+    /// ```
     pub fn with_ghidra(mut self, ghidra_path: PathBuf) -> Self {
         self.ghidra_path = Some(ghidra_path);
         self
     }
 
     /// Force strings-only mode (skip Ghidra even if available).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::BinarySource;
+    ///
+    /// let source = BinarySource::strings_only("target/app");
+    /// assert_eq!(source.name(), "binary");
+    /// ```
     pub fn strings_only(path: impl Into<PathBuf>) -> Self {
         Self {
             path: path.into(),

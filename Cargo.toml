@@ -10,7 +10,7 @@ members = [
 default-members = ["crates/cli"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 description = "A high-performance secret scanner — detect API keys, tokens, passwords, and credentials in code, git history, and archives"
@@ -21,10 +21,10 @@ categories = ["command-line-utilities", "development-tools"]
 authors = ["CORUM COLLECTIVE LLC"]
 
 [workspace.dependencies]
-keyhog-core = { path = "crates/core" }
-keyhog-scanner = { path = "crates/scanner", default-features = false }
-keyhog-verifier = { path = "crates/verifier" }
-keyhog-sources = { path = "crates/sources" }
+keyhog-core = { version = "0.2", path = "crates/core" }
+keyhog-scanner = { version = "0.2", path = "crates/scanner", default-features = false }
+keyhog-verifier = { version = "0.2", path = "crates/verifier" }
+keyhog-sources = { version = "0.2", path = "crates/sources" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -36,7 +36,7 @@ tokio = { version = "1", features = ["full"] }
 
 # Pattern matching
 aho-corasick = "1"
-multimatch = { path = "../../libs/multimatch" }
+multimatch = { version = "0.2", path = "../../libs/offensive/multimatch" }
 regex = "1"
 regex-syntax = "0.8"
 
@@ -55,7 +55,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # File system
-codewalk = { path = "../../libs/codewalk" }
+codewalk = { version = "0.2", path = "../../libs/runtime/codewalk" }
 base64 = "0.22"
 unicode-normalization = "0.1"
 

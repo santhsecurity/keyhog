@@ -17,8 +17,8 @@ use clap::{Parser, ValueEnum};
 use rayon::prelude::*;
 
 use keyhog_core::{
-    JsonReporter, JsonlReporter, MatchLocation, RawMatch, Reporter, SarifReporter, Source,
-    TextReporter, VerificationResult, load_detectors,
+    DedupScope, JsonReporter, JsonlReporter, RawMatch, Reporter,
+    SarifReporter, Source, TextReporter, VerificationResult, dedup_matches, load_detectors,
 };
 use keyhog_scanner::CompiledScanner;
 #[cfg(feature = "full")]
@@ -82,18 +82,7 @@ fn print_banner(detector_count: usize) {
     eprintln!();
 }
 
-#[derive(Clone)]
-struct DedupedMatch {
-    detector_id: String,
-    detector_name: String,
-    service: String,
-    severity: keyhog_core::Severity,
-    credential: String,
-    companion: Option<String>,
-    primary_location: MatchLocation,
-    additional_locations: Vec<MatchLocation>,
-    confidence: Option<f64>,
-}
+// DedupedMatch is now imported from keyhog_core.
 
 #[derive(Parser)]
 #[command(
@@ -135,6 +124,10 @@ struct ScanArgs {
     #[arg(short, long, default_value = "detectors")]
     detectors: PathBuf,
 
+    /// Positional shorthand for `--path`
+    #[arg(value_name = "PATH", conflicts_with = "path")]
+    input: Option<PathBuf>,
+
     /// Scan a directory or file
     #[arg(short, long)]
     path: Option<PathBuf>,
@@ -148,7 +141,7 @@ struct ScanArgs {
     #[arg(long)]
     stdin: bool,
 
-    /// Scan git repository history
+    /// Scan reachable git blobs from repository history (deduplicated by blob ID)
     #[cfg(feature = "git")]
     #[arg(long)]
     git: Option<PathBuf>,
@@ -197,6 +190,11 @@ struct ScanArgs {
     #[cfg(feature = "docker")]
     #[arg(long, value_name = "IMAGE")]
     docker_image: Option<String>,
+
+    /// Scan JavaScript, source maps, or WASM binaries at URLs for secrets
+    #[cfg(feature = "web")]
+    #[arg(long, value_name = "URL", num_args = 1..)]
+    url: Option<Vec<String>>,
 
     /// Max git commits to traverse
     #[cfg(feature = "git")]
@@ -263,7 +261,7 @@ struct ScanArgs {
     /// - `file`: same credential in different files = separate findings
     /// - `none`: no dedup, report every match
     #[arg(long, default_value = "credential", value_enum)]
-    dedup: DedupScope,
+    dedup: CliDedupScope,
 }
 
 #[derive(Parser)]
@@ -302,14 +300,26 @@ enum OutputFormat {
     Sarif,
 }
 
+/// CLI-level dedup scope that maps to [`keyhog_core::DedupScope`].
 #[derive(Clone, ValueEnum, PartialEq)]
-enum DedupScope {
+enum CliDedupScope {
     /// Same credential across all files = one finding (default, best for git history)
     Credential,
     /// Same credential in different files = separate findings (best for filesystem)
     File,
     /// No deduplication — report every pattern match
     None,
+}
+
+impl CliDedupScope {
+    /// Convert to the core library's [`DedupScope`].
+    fn to_core(&self) -> DedupScope {
+        match self {
+            Self::Credential => DedupScope::Credential,
+            Self::File => DedupScope::File,
+            Self::None => DedupScope::None,
+        }
+    }
 }
 
 /// On-disk `.keyhog.toml` configuration file that mirrors CLI arguments.
@@ -480,11 +490,11 @@ fn apply_config_file(args: &mut ScanArgs) {
         }
     }
     if let Some(ref dedup_str) = config.dedup {
-        if args.dedup == DedupScope::Credential {
+        if args.dedup == CliDedupScope::Credential {
             match dedup_str.to_ascii_lowercase().as_str() {
                 "credential" => {}
-                "file" => args.dedup = DedupScope::File,
-                "none" => args.dedup = DedupScope::None,
+                "file" => args.dedup = CliDedupScope::File,
+                "none" => args.dedup = CliDedupScope::None,
                 other => tracing::warn!("unknown dedup '{other}' in .keyhog.toml"),
             }
         }
@@ -601,6 +611,9 @@ async fn main() -> ExitCode {
 
 async fn run_scan(mut args: ScanArgs) -> Result<ExitCode> {
     let start = Instant::now();
+    if args.path.is_none() {
+        args.path = args.input.clone();
+    }
     apply_config_file(&mut args);
     // Show banner early so the user sees it during detector loading.
     // The detector count is populated after loading.
@@ -899,73 +912,7 @@ fn filter_and_resolve(
     matches
 }
 
-fn dedup_matches(matches: Vec<RawMatch>, scope: &DedupScope) -> Vec<DedupedMatch> {
-    if *scope == DedupScope::None {
-        // No dedup — every match is its own finding
-        return matches
-            .into_iter()
-            .map(|m| DedupedMatch {
-                detector_id: m.detector_id,
-                detector_name: m.detector_name,
-                service: m.service,
-                severity: m.severity,
-                credential: m.credential,
-                companion: m.companion,
-                primary_location: m.location,
-                additional_locations: Vec::new(),
-                confidence: m.confidence,
-            })
-            .collect();
-    }
-
-    let mut groups: HashMap<String, DedupedMatch> = HashMap::new();
-
-    for matched in matches {
-        let key = match scope {
-            // Credential-level dedup: same (detector, credential) across all files = one finding
-            DedupScope::Credential => {
-                let (d, c) = matched.deduplication_key();
-                format!("{d}:{c}")
-            }
-            // File-level dedup: same credential in same file = one finding, different files = separate
-            DedupScope::File => {
-                let (d, c) = matched.deduplication_key();
-                let file = matched.location.file_path.as_deref().unwrap_or("stdin");
-                format!("{d}:{c}:{file}")
-            }
-            DedupScope::None => {
-                unreachable!("DedupScope::None handled by early return above");
-            }
-        };
-
-        match groups.get_mut(&key) {
-            Some(existing) => {
-                existing.additional_locations.push(matched.location);
-                if existing.companion.is_none() && matched.companion.is_some() {
-                    existing.companion = matched.companion;
-                }
-            }
-            None => {
-                groups.insert(
-                    key,
-                    DedupedMatch {
-                        detector_id: matched.detector_id,
-                        detector_name: matched.detector_name,
-                        service: matched.service,
-                        severity: matched.severity,
-                        credential: matched.credential,
-                        companion: matched.companion,
-                        primary_location: matched.location,
-                        additional_locations: Vec::new(),
-                        confidence: matched.confidence,
-                    },
-                );
-            }
-        }
-    }
-
-    groups.into_values().collect()
-}
+// dedup_matches is now imported from keyhog_core.
 
 fn parse_min_confidence(value: &str) -> Result<f64, String> {
     let parsed = value
@@ -1106,7 +1053,7 @@ async fn finalize(
     detectors: &[keyhog_core::DetectorSpec],
     args: &ScanArgs,
 ) -> Result<Vec<keyhog_core::VerifiedFinding>> {
-    let mut groups = dedup_matches(matches, &args.dedup);
+    let mut groups = dedup_matches(matches, &args.dedup.to_core());
     groups.sort_by(|a, b| b.severity.cmp(&a.severity));
 
     #[cfg(feature = "verify")]
@@ -1120,20 +1067,7 @@ async fn finalize(
             max_concurrent_per_service: args.rate,
             ..Default::default()
         };
-        let verify_groups = groups
-            .into_iter()
-            .map(|group| keyhog_verifier::DedupedMatch {
-                detector_id: group.detector_id,
-                detector_name: group.detector_name,
-                service: group.service,
-                severity: group.severity,
-                credential: group.credential,
-                companion: group.companion,
-                primary_location: group.primary_location,
-                additional_locations: group.additional_locations,
-                confidence: group.confidence,
-            })
-            .collect();
+        let verify_groups = groups;
         let mut findings = VerificationEngine::new(detectors, config)?
             .verify_all(verify_groups)
             .await;
@@ -1276,6 +1210,11 @@ fn build_sources(args: &ScanArgs) -> Result<Vec<Box<dyn Source>>> {
         sources.push(Box::new(keyhog_sources::DockerImageSource::new(
             image.clone(),
         )));
+    }
+
+    #[cfg(feature = "web")]
+    if let Some(urls) = &args.url {
+        sources.push(Box::new(keyhog_sources::WebSource::new(urls.clone())));
     }
 
     Ok(sources)

@@ -52,7 +52,7 @@ if [[ ! -x "$KEYHOG_BIN" ]]; then
         print_error "KeyHog scanner not found at $KEYHOG_BIN"
         echo ""
         echo "To fix:"
-        echo "  1. Build the scanner: cargo build --release -p keyhog-cli"
+        echo "  1. Build the scanner: cargo build --release -p keyhog"
         echo "  2. Or set KEYHOG_BIN to the binary path"
         exit 1
     fi

@@ -22,6 +22,16 @@ const EMPTY_PAYLOAD_SHA256: &str =
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 /// Scan text objects in an S3 bucket via the ListObjectsV2 REST API.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Source;
+/// use keyhog_sources::S3Source;
+///
+/// let source = S3Source::new("bucket-name").with_prefix("configs/");
+/// assert_eq!(source.name(), "s3");
+/// ```
 pub struct S3Source {
     bucket: String,
     prefix: Option<String>,
@@ -31,6 +41,16 @@ pub struct S3Source {
 
 impl S3Source {
     /// Create a source that lists and downloads text objects from `bucket`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::S3Source;
+    ///
+    /// let source = S3Source::new("bucket-name");
+    /// assert_eq!(source.name(), "s3");
+    /// ```
     pub fn new(bucket: impl Into<String>) -> Self {
         Self {
             bucket: bucket.into(),
@@ -41,18 +61,48 @@ impl S3Source {
     }
 
     /// Limit scanning to objects whose keys start with `prefix`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::S3Source;
+    ///
+    /// let source = S3Source::new("bucket-name").with_prefix("configs/");
+    /// assert_eq!(source.name(), "s3");
+    /// ```
     pub fn with_prefix(mut self, prefix: impl Into<String>) -> Self {
         self.prefix = Some(prefix.into());
         self
     }
 
     /// Override the S3 endpoint, for example for MinIO or other S3-compatible APIs.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::S3Source;
+    ///
+    /// let source = S3Source::new("bucket-name").with_endpoint("https://minio.example.com");
+    /// assert_eq!(source.name(), "s3");
+    /// ```
     pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
         self.endpoint = Some(endpoint.into());
         self
     }
 
     /// Limit the number of objects listed from the bucket before stopping.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::S3Source;
+    ///
+    /// let source = S3Source::new("bucket-name").with_max_objects(25);
+    /// assert_eq!(source.name(), "s3");
+    /// ```
     pub fn with_max_objects(mut self, max_objects: usize) -> Self {
         self.max_objects = max_objects;
         self
@@ -647,7 +697,7 @@ mod tests {
 <ListBucketResult></ListBucketResult>"#,
         )
         .unwrap_err();
-        assert!(err.to_string().contains("DOCTYPE"));
+        assert!(err.to_string().contains("DTD/entity"));
     }
 
     #[test]

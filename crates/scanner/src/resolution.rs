@@ -18,6 +18,34 @@ const CREDENTIAL_LENGTH_WEIGHT: f64 = 0.01;
 /// Resolve overlapping matches: for each credential text region,
 /// keep only the best match. Also suppress entropy findings when
 /// a named detector already found a secret on the same line.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{MatchLocation, RawMatch, Severity};
+/// use keyhog_scanner::resolution::resolve_matches;
+///
+/// let matches = resolve_matches(vec![RawMatch {
+///     detector_id: "demo-token".into(),
+///     detector_name: "Demo Token".into(),
+///     service: "demo".into(),
+///     severity: Severity::High,
+///     credential: "demo_ABC12345".into(),
+///     companion: None,
+///     location: MatchLocation {
+///         source: "filesystem".into(),
+///         file_path: Some(".env".into()),
+///         line: Some(1),
+///         offset: 0,
+///         commit: None,
+///         author: None,
+///         date: None,
+///     },
+///     entropy: None,
+///     confidence: Some(0.9),
+/// }]);
+/// assert_eq!(matches.len(), 1);
+/// ```
 pub fn resolve_matches(mut matches: Vec<RawMatch>) -> Vec<RawMatch> {
     if matches.len() <= SINGLE_MATCH_COUNT {
         return matches;

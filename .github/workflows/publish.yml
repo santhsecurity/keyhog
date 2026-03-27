@@ -35,31 +35,17 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # Publish order respects dependency graph:
+      #   keyhog-core → keyhog-verifier → keyhog-sources → keyhog-scanner → keyhog
+      # Each step waits for crates.io index propagation.
+
       - name: Publish keyhog-core
         run: cargo publish -p keyhog-core
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      # Wait for crates.io index to propagate the new keyhog-core version
-      # before publishing dependents.
       - name: Wait for index propagation
-        run: sleep 30
-
-      - name: Publish keyhog-scanner
-        run: cargo publish -p keyhog-scanner
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Wait for index propagation
-        run: sleep 30
-
-      - name: Publish keyhog-sources
-        run: cargo publish -p keyhog-sources
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Wait for index propagation
-        run: sleep 30
+        run: sleep 45
 
       - name: Publish keyhog-verifier
         run: cargo publish -p keyhog-verifier
@@ -67,9 +53,25 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Wait for index propagation
-        run: sleep 30
+        run: sleep 45
 
-      - name: Publish keyhog-cli
-        run: cargo publish -p keyhog-cli
+      - name: Publish keyhog-sources
+        run: cargo publish -p keyhog-sources
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for index propagation
+        run: sleep 45
+
+      - name: Publish keyhog-scanner
+        run: cargo publish -p keyhog-scanner
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for index propagation
+        run: sleep 45
+
+      - name: Publish keyhog (CLI)
+        run: cargo publish -p keyhog
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

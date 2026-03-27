@@ -22,6 +22,17 @@ const MAX_GIT_BLOB_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_GIT_CHUNKS: usize = 500_000;
 
 /// Scans git history: traverses commits and extracts text blob contents.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Source;
+/// use keyhog_sources::GitSource;
+/// use std::path::PathBuf;
+///
+/// let source = GitSource::new(PathBuf::from(".")).with_max_commits(10);
+/// assert_eq!(source.name(), "git");
+/// ```
 pub struct GitSource {
     repo_path: PathBuf,
     max_commits: Option<usize>,
@@ -29,6 +40,17 @@ pub struct GitSource {
 
 impl GitSource {
     /// Create a source that traverses a git repository.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::GitSource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = GitSource::new(PathBuf::from("."));
+    /// assert_eq!(source.name(), "git");
+    /// ```
     pub fn new(repo_path: PathBuf) -> Self {
         Self {
             repo_path,
@@ -37,6 +59,17 @@ impl GitSource {
     }
 
     /// Limit how many commits are traversed from `HEAD`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::GitSource;
+    /// use std::path::PathBuf;
+    ///
+    /// let source = GitSource::new(PathBuf::from(".")).with_max_commits(5);
+    /// assert_eq!(source.name(), "git");
+    /// ```
     pub fn with_max_commits(mut self, n: usize) -> Self {
         self.max_commits = Some(n);
         self

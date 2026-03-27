@@ -359,10 +359,11 @@ dependencies = [
 
 [[package]]
 name = "codewalk"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ignore",
  "serde",
+ "thiserror 2.0.18",
  "toml",
 ]
 
@@ -1915,8 +1916,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "keyhog-cli"
-version = "0.1.0"
+name = "keyhog"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1936,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "keyhog-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rayon",
  "regex",
@@ -1951,7 +1952,7 @@ dependencies = [
 
 [[package]]
 name = "keyhog-scanner"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aho-corasick",
  "base64",
@@ -1974,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "keyhog-sources"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "chrono",
@@ -2004,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "keyhog-verifier"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "dashmap",
@@ -2209,7 +2210,7 @@ dependencies = [
 
 [[package]]
 name = "multimatch"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "aho-corasick",
  "regex",

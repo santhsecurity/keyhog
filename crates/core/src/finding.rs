@@ -7,6 +7,34 @@ use std::collections::HashMap;
 use crate::Severity;
 
 /// A credential match found by the scanner, before verification.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{MatchLocation, RawMatch, Severity};
+///
+/// let finding = RawMatch {
+///     detector_id: "demo-token".into(),
+///     detector_name: "Demo Token".into(),
+///     service: "demo".into(),
+///     severity: Severity::High,
+///     credential: "demo_ABC12345".into(),
+///     companion: None,
+///     location: MatchLocation {
+///         source: "filesystem".into(),
+///         file_path: Some(".env".into()),
+///         line: Some(1),
+///         offset: 0,
+///         commit: None,
+///         author: None,
+///         date: None,
+///     },
+///     entropy: None,
+///     confidence: Some(0.9),
+/// };
+///
+/// assert_eq!(finding.detector_id, "demo-token");
+/// ```
 #[derive(Debug, Clone, Serialize)]
 pub struct RawMatch {
     /// Stable detector identifier.
@@ -32,6 +60,24 @@ pub struct RawMatch {
 }
 
 /// Where a credential was found: file path, line number, commit, and author.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::MatchLocation;
+///
+/// let location = MatchLocation {
+///     source: "stdin".into(),
+///     file_path: None,
+///     line: Some(3),
+///     offset: 20,
+///     commit: None,
+///     author: None,
+///     date: None,
+/// };
+///
+/// assert_eq!(location.line, Some(3));
+/// ```
 #[derive(Debug, Clone, Serialize)]
 pub struct MatchLocation {
     /// Logical source backend, such as `filesystem` or `git`.
@@ -51,6 +97,36 @@ pub struct MatchLocation {
 }
 
 /// A finding after verification — the final output.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{MatchLocation, Severity, VerificationResult, VerifiedFinding};
+/// use std::collections::HashMap;
+///
+/// let finding = VerifiedFinding {
+///     detector_id: "demo-token".into(),
+///     detector_name: "Demo Token".into(),
+///     service: "demo".into(),
+///     severity: Severity::High,
+///     credential_redacted: "demo_...2345".into(),
+///     location: MatchLocation {
+///         source: "filesystem".into(),
+///         file_path: Some(".env".into()),
+///         line: Some(1),
+///         offset: 0,
+///         commit: None,
+///         author: None,
+///         date: None,
+///     },
+///     verification: VerificationResult::Skipped,
+///     metadata: HashMap::new(),
+///     additional_locations: Vec::new(),
+///     confidence: Some(0.9),
+/// };
+///
+/// assert_eq!(finding.service, "demo");
+/// ```
 #[derive(Debug, Clone, Serialize)]
 pub struct VerifiedFinding {
     /// Stable detector identifier.
@@ -79,6 +155,15 @@ pub struct VerifiedFinding {
 }
 
 /// Result of live verification: whether the credential is active, revoked, or untested.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::VerificationResult;
+///
+/// let status = VerificationResult::Live;
+/// assert!(matches!(status, VerificationResult::Live));
+/// ```
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VerificationResult {
@@ -99,6 +184,34 @@ pub enum VerificationResult {
 impl RawMatch {
     /// Deduplication key: same detector + same credential = same finding.
     /// Git history includes commit ID so the same secret in different commits stays distinct.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::{MatchLocation, RawMatch, Severity};
+    ///
+    /// let finding = RawMatch {
+    ///     detector_id: "demo".into(),
+    ///     detector_name: "Demo".into(),
+    ///     service: "demo".into(),
+    ///     severity: Severity::High,
+    ///     credential: "demo_ABC12345".into(),
+    ///     companion: None,
+    ///     location: MatchLocation {
+    ///         source: "filesystem".into(),
+    ///         file_path: Some(".env".into()),
+    ///         line: Some(1),
+    ///         offset: 0,
+    ///         commit: None,
+    ///         author: None,
+    ///         date: None,
+    ///     },
+    ///     entropy: None,
+    ///     confidence: None,
+    /// };
+    ///
+    /// assert_eq!(finding.deduplication_key().0, "demo");
+    /// ```
     pub fn deduplication_key(&self) -> (String, String) {
         if self.location.source == "git-history" {
             (
@@ -116,6 +229,15 @@ impl RawMatch {
 }
 
 /// Redact a credential for safe display without leaking type prefixes or exact length.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::redact;
+///
+/// let key = format!("sk_live_{}", "abcdefghijklmnopqrstuvwxyz1234");
+/// assert_eq!(redact(&key), "sk_live_...1234");
+/// ```
 pub fn redact(credential: &str) -> String {
     if credential.is_empty() {
         return "*".repeat(8);

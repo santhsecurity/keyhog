@@ -5,10 +5,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
 
 [features]
-default = ["git"]
+default = ["git", "web"]
 git = ["gix"]
+web = ["dep:reqwest", "dep:serde_json"]
 github = ["dep:reqwest", "dep:tempfile", "dep:serde", "dep:serde_json", "dep:base64"]
 s3 = [
     "dep:reqwest",

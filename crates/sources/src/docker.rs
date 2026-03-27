@@ -14,12 +14,32 @@ use crate::FilesystemSource;
 const MAX_TAR_ENTRY_BYTES: u64 = 128 * 1024 * 1024;
 
 /// Scan a Docker image by saving it as a tar archive and unpacking each layer.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Source;
+/// use keyhog_sources::DockerImageSource;
+///
+/// let source = DockerImageSource::new("alpine:latest");
+/// assert_eq!(source.name(), "docker");
+/// ```
 pub struct DockerImageSource {
     image: String,
 }
 
 impl DockerImageSource {
     /// Create a Docker image source for `docker image save`-based scanning.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::DockerImageSource;
+    ///
+    /// let source = DockerImageSource::new("alpine:latest");
+    /// assert_eq!(source.name(), "docker");
+    /// ```
     pub fn new(image: impl Into<String>) -> Self {
         Self {
             image: image.into(),
@@ -188,7 +208,7 @@ fn find_layer_archives(root_path: &Path) -> Result<Vec<PathBuf>, SourceError> {
             .max_file_size(0),
     )
     .walk()
-    .into_iter();
+    .map_err(|error| SourceError::Other(error.to_string()))?;
 
     for entry in walker {
         if entry.path.file_name().and_then(|name| name.to_str()) == Some("layer.tar") {
@@ -275,12 +295,21 @@ mod tests {
         let file = File::create(&archive_path).unwrap();
         let mut builder = tar::Builder::new(file);
 
+        // The `tar` crate rejects `..` paths in `append_data` and `set_path`,
+        // so write the malicious path directly into the raw GNU header bytes
+        // to simulate a crafted archive.
         let mut header = tar::Header::new_gnu();
         header.set_size(4);
         header.set_mode(0o644);
+        {
+            let path_bytes = b"../escape.txt";
+            let name = &mut header.as_old_mut().name;
+            name[..path_bytes.len()].copy_from_slice(path_bytes);
+            name[path_bytes.len()..].fill(0);
+        }
         header.set_cksum();
         builder
-            .append_data(&mut header, "../escape.txt", "test".as_bytes())
+            .append(&header, "test".as_bytes())
             .unwrap();
         builder.finish().unwrap();
 

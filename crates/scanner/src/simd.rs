@@ -13,6 +13,14 @@ pub(crate) mod backend {
 
     /// Compiled Hyperscan database for all detector patterns.
     /// Thread-safe: the database is immutable and scratch is pooled per-instance.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use keyhog_scanner::simd::backend::HsScanner;
+    ///
+    /// let _scanner = HsScanner::compile(&[(0, 0, "demo_[A-Z0-9]{8}", false)]).unwrap();
+    /// ```
     pub struct HsScanner {
         db: BlockDatabase,
         /// Map from HS pattern ID to (detector_index, pattern_index, has_group)
@@ -32,6 +40,14 @@ pub(crate) mod backend {
 
     impl HsScanner {
         /// Compile patterns into a Hyperscan database.
+        ///
+        /// # Examples
+        ///
+        /// ```rust,ignore
+        /// use keyhog_scanner::simd::backend::HsScanner;
+        ///
+        /// let _scanner = HsScanner::compile(&[(0, 0, "demo_[A-Z0-9]{8}", false)]).unwrap();
+        /// ```
         pub fn compile(
             patterns: &[(usize, usize, &str, bool)],
         ) -> Result<(Self, Vec<usize>), String> {
@@ -112,8 +128,17 @@ pub(crate) mod backend {
             ))
         }
 
-        /// Scan text and return (hs_pattern_id, match_start, match_end).
+        /// Scan text and return `(hs_pattern_id, match_start, match_end)`.
         /// Uses a scratch pool for thread-safety without per-call allocation.
+        ///
+        /// # Examples
+        ///
+        /// ```rust,ignore
+        /// use keyhog_scanner::simd::backend::HsScanner;
+        ///
+        /// let (scanner, _) = HsScanner::compile(&[(0, 0, "demo_[A-Z0-9]{8}", false)]).unwrap();
+        /// let _matches = scanner.scan(b"demo_ABC12345");
+        /// ```
         pub fn scan(&self, text: &[u8]) -> Vec<(usize, usize, usize)> {
             // Take scratch from instance pool, or allocate new one
             let scratch = self
@@ -142,10 +167,30 @@ pub(crate) mod backend {
             matches
         }
 
+        /// Look up detector and pattern metadata for a Hyperscan pattern id.
+        ///
+        /// # Examples
+        ///
+        /// ```rust,ignore
+        /// use keyhog_scanner::simd::backend::HsScanner;
+        ///
+        /// let (scanner, _) = HsScanner::compile(&[(0, 0, "demo_[A-Z0-9]{8}", false)]).unwrap();
+        /// assert!(scanner.pattern_info(0).is_some());
+        /// ```
         pub fn pattern_info(&self, hs_id: usize) -> Option<(usize, usize, bool)> {
             self.pattern_map.get(hs_id).copied()
         }
 
+        /// Return the number of patterns compiled into the SIMD database.
+        ///
+        /// # Examples
+        ///
+        /// ```rust,ignore
+        /// use keyhog_scanner::simd::backend::HsScanner;
+        ///
+        /// let (scanner, _) = HsScanner::compile(&[(0, 0, "demo_[A-Z0-9]{8}", false)]).unwrap();
+        /// assert_eq!(scanner.pattern_count(), 1);
+        /// ```
         pub fn pattern_count(&self) -> usize {
             self.pattern_map.len()
         }
@@ -153,6 +198,14 @@ pub(crate) mod backend {
 }
 
 /// Check if SIMD scanning is available.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::simd::simd_available;
+///
+/// let _ = simd_available();
+/// ```
 pub fn simd_available() -> bool {
     cfg!(feature = "simd")
 }

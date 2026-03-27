@@ -8,6 +8,16 @@ use std::io::Read;
 const MAX_STDIN_BYTES: usize = 10 * 1024 * 1024;
 
 /// Reads all of stdin as a single chunk.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_sources::StdinSource;
+/// use keyhog_core::Source;
+///
+/// let source = StdinSource;
+/// assert_eq!(source.name(), "stdin");
+/// ```
 pub struct StdinSource;
 
 impl Source for StdinSource {

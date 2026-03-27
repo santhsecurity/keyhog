@@ -9,6 +9,15 @@ use crate::{MatchLocation, Severity, VerifiedFinding};
 use super::{ReportError, Reporter};
 
 /// SARIF v2.1.0 reporter for integration with GitHub, Azure DevOps, and IDEs.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::SarifReporter;
+///
+/// let reporter = SarifReporter::new(Vec::new());
+/// let _ = reporter;
+/// ```
 pub struct SarifReporter<W: Write> {
     writer: W,
     findings: Vec<VerifiedFinding>,
@@ -138,6 +147,15 @@ struct SarifLog {
 
 impl<W: Write> SarifReporter<W> {
     /// Create a SARIF reporter.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::SarifReporter;
+    ///
+    /// let reporter = SarifReporter::new(Vec::new());
+    /// let _ = reporter;
+    /// ```
     pub fn new(writer: W) -> Self {
         Self {
             writer,

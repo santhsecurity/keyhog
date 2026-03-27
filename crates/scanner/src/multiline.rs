@@ -9,6 +9,14 @@ const MAX_MULTILINE_LINE_BYTES: usize = 64 * 1024;
 
 /// A mapping from an offset in the joined text back to the original line number.
 #[derive(Debug, Clone)]
+/// Mapping from preprocessed offsets back to original line numbers.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use keyhog_scanner::multiline::LineMapping;
+/// let _ = std::mem::size_of::<LineMapping>();
+/// ```
 pub struct LineMapping {
     /// Start offset in the joined text (inclusive)
     pub start_offset: usize,
@@ -22,9 +30,19 @@ pub struct LineMapping {
 ///
 /// The `text` field contains the **original text unchanged**, followed by any
 /// multiline-joined segments appended after a separator. This ensures:
-/// 1. Structural regex patterns (`secret_key = "..."`) match in the original text
-/// 2. Multiline-joined secrets (`"sk-proj-" + "abc..."`) match in the appended segments
-/// 3. No double-scanning or heuristic thresholds needed
+///
+/// 1. Structural regex patterns (`secret_key = "..."`) match in the original text.
+/// 2. Multiline-joined secrets (`"sk-proj-" + "abc..."`) match in the appended segments.
+/// 3. No double-scanning or heuristic thresholds are needed.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::multiline::PreprocessedText;
+///
+/// let value = PreprocessedText::passthrough("secret");
+/// assert_eq!(value.line_for_offset(0), Some(1));
+/// ```
 #[derive(Debug, Clone)]
 pub struct PreprocessedText {
     /// Original text + appended multiline-joined segments
@@ -37,6 +55,16 @@ pub struct PreprocessedText {
 
 impl PreprocessedText {
     /// Get the original line number for a given offset in the joined text.
+    /// Map a byte offset in preprocessed text back to an original line number.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_scanner::multiline::PreprocessedText;
+    ///
+    /// let value = PreprocessedText::passthrough("secret");
+    /// assert_eq!(value.line_for_offset(0), Some(1));
+    /// ```
     pub fn line_for_offset(&self, offset: usize) -> Option<usize> {
         self.mappings
             .iter()
@@ -45,6 +73,16 @@ impl PreprocessedText {
     }
 
     /// Create a passthrough (no preprocessing) — one mapping per line.
+    /// Build a preprocessed representation with a one-line identity mapping.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_scanner::multiline::PreprocessedText;
+    ///
+    /// let value = PreprocessedText::passthrough("secret");
+    /// assert_eq!(value.text, "secret");
+    /// ```
     pub fn passthrough(text: &str) -> Self {
         let mut mappings = Vec::new();
         let mut offset = 0;
@@ -69,7 +107,16 @@ impl PreprocessedText {
     }
 }
 
-/// Configuration for the multi-line preprocessor.
+/// Configuration for multiline concatenation recovery.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::multiline::MultilineConfig;
+///
+/// let config = MultilineConfig::default();
+/// assert!(config.python_implicit);
+/// ```
 #[derive(Debug, Clone)]
 pub struct MultilineConfig {
     /// Maximum number of lines to join in a single concatenation chain
@@ -181,6 +228,16 @@ pub(crate) fn has_concatenation_indicators(text: &str) -> bool {
 /// - Java/C#: + operator for string concatenation
 ///
 /// Returns the preprocessed text with a mapping from joined offsets back to original line numbers.
+/// Join adjacent string fragments and continuations before scanning.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::multiline::{MultilineConfig, preprocess_multiline};
+///
+/// let value = preprocess_multiline("\"abc\" + \"123\"", &MultilineConfig::default());
+/// assert!(value.text.contains("abc123"));
+/// ```
 pub fn preprocess_multiline(text: &str, config: &MultilineConfig) -> PreprocessedText {
     if text.len() > MAX_MULTILINE_PREPROCESS_BYTES
         || text

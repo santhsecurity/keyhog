@@ -30,7 +30,7 @@ To add a new source backend (e.g., a new version control system or cloud storage
 1. Navigate to the `crates/sources/src/` directory.
 2. Create a new module for your source backend.
 3. Implement the `keyhog_core::Source` trait for your new backend. This typically involves implementing methods to iterate over files or data streams.
-4. Register your new source in the main `keyhog-cli` application so it can be invoked via the command line.
+4. Register your new source in the main `keyhog` application so it can be invoked via the command line.
 5. Add appropriate unit and integration tests for your source.
 
 ## 3. How to add a new output format

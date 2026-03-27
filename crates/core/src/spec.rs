@@ -14,6 +14,31 @@ pub use validate::{QualityIssue, validate_detector};
 
 /// A single detector specification, parsed from a TOML file.
 /// Each file in the `detectors/` directory produces one of these.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{DetectorFile, DetectorSpec, PatternSpec, Severity};
+///
+/// let file = DetectorFile {
+///     detector: DetectorSpec {
+///         id: "demo-token".into(),
+///         name: "Demo Token".into(),
+///         service: "demo".into(),
+///         severity: Severity::High,
+///         patterns: vec![PatternSpec {
+///             regex: "demo_[A-Z0-9]{8}".into(),
+///             description: None,
+///             group: None,
+///         }],
+///         companion: None,
+///         verify: None,
+///         keywords: vec!["demo_".into()],
+///     },
+/// };
+///
+/// assert_eq!(file.detector.service, "demo");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectorFile {
     /// Parsed detector payload from the TOML file.
@@ -21,6 +46,29 @@ pub struct DetectorFile {
 }
 
 /// Full detector definition loaded from TOML.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{DetectorSpec, PatternSpec, Severity};
+///
+/// let spec = DetectorSpec {
+///     id: "demo-token".into(),
+///     name: "Demo Token".into(),
+///     service: "demo".into(),
+///     severity: Severity::High,
+///     patterns: vec![PatternSpec {
+///         regex: "demo_[A-Z0-9]{8}".into(),
+///         description: Some("Demo credential".into()),
+///         group: None,
+///     }],
+///     companion: None,
+///     verify: None,
+///     keywords: vec!["demo_".into()],
+/// };
+///
+/// assert_eq!(spec.patterns.len(), 1);
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectorSpec {
     /// Stable detector identifier.
@@ -45,6 +93,20 @@ pub struct DetectorSpec {
 }
 
 /// One regex pattern entry inside a detector.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::PatternSpec;
+///
+/// let pattern = PatternSpec {
+///     regex: "(demo_[A-Z0-9]{8})".into(),
+///     description: Some("Capture the credential".into()),
+///     group: Some(1),
+/// };
+///
+/// assert_eq!(pattern.group, Some(1));
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PatternSpec {
     /// Regex used to detect the credential.
@@ -59,6 +121,20 @@ pub struct PatternSpec {
 
 /// A secondary pattern that must appear near the primary match.
 /// Example: AWS secret key found within 5 lines of an access key.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::CompanionSpec;
+///
+/// let companion = CompanionSpec {
+///     regex: "secret_[A-Z0-9]{8}".into(),
+///     within_lines: 3,
+///     name: "secret".into(),
+/// };
+///
+/// assert_eq!(companion.within_lines, 3);
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompanionSpec {
     /// Regex used to locate the companion value.
@@ -75,6 +151,35 @@ fn default_within_lines() -> usize {
 }
 
 /// Verification HTTP request and success criteria for a detector.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{AuthSpec, HeaderSpec, HttpMethod, SuccessSpec, VerifySpec};
+///
+/// let verify = VerifySpec {
+///     method: HttpMethod::Get,
+///     url: "https://api.example.com/v1/me".into(),
+///     auth: AuthSpec::Bearer { field: "match".into() },
+///     headers: vec![HeaderSpec {
+///         name: "X-Client".into(),
+///         value: "keyhog".into(),
+///     }],
+///     body: None,
+///     success: SuccessSpec {
+///         status: Some(200),
+///         status_not: None,
+///         body_contains: None,
+///         body_not_contains: None,
+///         json_path: None,
+///         equals: None,
+///     },
+///     metadata: Vec::new(),
+///     timeout_ms: Some(2_000),
+/// };
+///
+/// assert_eq!(verify.timeout_ms, Some(2_000));
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifySpec {
     /// HTTP method to use for verification.
@@ -100,6 +205,19 @@ pub struct VerifySpec {
 }
 
 /// One extra request header to attach during verification.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::HeaderSpec;
+///
+/// let header = HeaderSpec {
+///     name: "X-Client".into(),
+///     value: "keyhog".into(),
+/// };
+///
+/// assert_eq!(header.name, "X-Client");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeaderSpec {
     /// Header name.
@@ -113,6 +231,15 @@ pub struct HeaderSpec {
 ///   - `"match"` — the primary matched credential
 ///   - `"companion.<name>"` — a companion match
 ///   - anything else — literal string
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::AuthSpec;
+///
+/// let auth = AuthSpec::Bearer { field: "match".into() };
+/// assert!(matches!(auth, AuthSpec::Bearer { .. }));
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AuthSpec {
@@ -164,6 +291,23 @@ fn default_aws_region() -> String {
 
 /// Conditions that must ALL be true for verification to succeed.
 /// All fields are optional; present fields form an implicit AND.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::SuccessSpec;
+///
+/// let success = SuccessSpec {
+///     status: Some(200),
+///     status_not: Some(401),
+///     body_contains: Some("ok".into()),
+///     body_not_contains: None,
+///     json_path: None,
+///     equals: None,
+/// };
+///
+/// assert_eq!(success.status, Some(200));
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SuccessSpec {
     #[serde(default)]
@@ -187,6 +331,22 @@ pub struct SuccessSpec {
 }
 
 /// Metadata extraction rule applied to a verification response.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::MetadataSpec;
+///
+/// let metadata = MetadataSpec {
+///     name: "account_id".into(),
+///     json_path: Some("data.id".into()),
+///     header: None,
+///     regex: None,
+///     group: None,
+/// };
+///
+/// assert_eq!(metadata.name, "account_id");
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetadataSpec {
     /// Output metadata key.
@@ -206,6 +366,14 @@ pub struct MetadataSpec {
 }
 
 /// Severity level attached to detector matches.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Severity;
+///
+/// assert_eq!(Severity::Critical.to_string(), "critical");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -234,6 +402,14 @@ impl std::fmt::Display for Severity {
 }
 
 /// HTTP methods supported by detector verification specs.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::HttpMethod;
+///
+/// assert!(matches!(HttpMethod::Post, HttpMethod::Post));
+/// ```
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum HttpMethod {
@@ -252,9 +428,23 @@ pub enum HttpMethod {
 }
 
 /// Errors that occur while loading detector specs from disk.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::SpecError;
+///
+/// let error = SpecError::ReadFile {
+///     path: "detectors/demo.toml".into(),
+///     source: std::io::Error::other("permission denied"),
+/// };
+/// assert!(error.to_string().contains("Fix"));
+/// ```
 #[derive(Debug, Error)]
 pub enum SpecError {
-    #[error("failed to read detector file {path}: {source}")]
+    #[error(
+        "failed to read detector file {path}: {source}. Fix: check the detector path exists and that the file is readable TOML"
+    )]
     ReadFile {
         path: String,
         source: std::io::Error,
@@ -397,7 +587,7 @@ status = 200
             .find(|d| d.id == "github-classic-pat")
             .expect("compat detector missing");
         assert_eq!(compat.service, "github");
-        assert_eq!(compat.patterns[0].regex, "ghp_[a-zA-Z0-9]{36}");
+        assert_eq!(compat.patterns[0].regex, "ghp_[a-zA-Z0-9]{36,40}");
     }
 
     #[test]
@@ -457,5 +647,82 @@ status = 200
             toml::from_str(include_str!("../../../detectors/retool-api-key.toml"))
                 .expect("retool detector should parse");
         assert!(file.detector.verify.is_none());
+    }
+
+    #[test]
+    fn aws_session_token_detector_requires_aws_specific_anchors() {
+        let file: DetectorFile =
+            toml::from_str(include_str!("../../../detectors/aws-session-token.toml"))
+                .expect("aws session token detector should parse");
+        assert!(file.detector.verify.is_none());
+        let env_regex = Regex::new(&file.detector.patterns[0].regex).unwrap();
+        assert!(env_regex.is_match(
+            "AWS_SESSION_TOKEN=IQoJb3JpZ2luX2VjENP//////////wEaCXVzLWVhc3QtMSJGMEQCIBexampleTOKENexampleTOKENexampleTOKENexampleTOKEN"
+        ));
+        assert!(!env_regex.is_match(
+            "IQoJb3JpZ2luX2VjENP//////////wEaCXVzLWVhc3QtMSJGMEQCIBexampleTOKENexampleTOKENexampleTOKENexampleTOKEN"
+        ));
+    }
+
+    #[test]
+    fn aws_secrets_manager_arn_detector_is_info_only_and_unverified() {
+        let file: DetectorFile = toml::from_str(include_str!(
+            "../../../detectors/aws-secrets-manager-arn.toml"
+        ))
+        .expect("aws secrets manager arn detector should parse");
+        assert_eq!(file.detector.id, "aws-secrets-manager-arn");
+        assert_eq!(file.detector.severity, Severity::Info);
+        assert!(file.detector.verify.is_none());
+    }
+
+    #[test]
+    fn tightened_companion_detectors_require_service_specific_context() {
+        let vonage: DetectorFile =
+            toml::from_str(include_str!("../../../detectors/vonage-video-api.toml"))
+                .expect("vonage detector should parse");
+        let vonage_companion = Regex::new(
+            &vonage
+                .detector
+                .companion
+                .as_ref()
+                .expect("vonage companion missing")
+                .regex,
+        )
+        .unwrap();
+        assert!(vonage_companion.is_match("VONAGE_API_SECRET=abcdef0123456789"));
+        assert!(!vonage_companion.is_match("abcdef0123456789"));
+
+        let wix: DetectorFile =
+            toml::from_str(include_str!("../../../detectors/wix-api-credentials.toml"))
+                .expect("wix detector should parse");
+        let wix_companion = Regex::new(
+            &wix.detector
+                .companion
+                .as_ref()
+                .expect("wix companion missing")
+                .regex,
+        )
+        .unwrap();
+        assert!(wix_companion.is_match("wix instance_id=123e4567-e89b-12d3-a456-426614174000"));
+        assert!(!wix_companion.is_match("123e4567-e89b-12d3-a456-426614174000"));
+
+        let codecommit: DetectorFile = toml::from_str(include_str!(
+            "../../../detectors/aws-codecommit-credentials.toml"
+        ))
+        .expect("codecommit detector should parse");
+        let codecommit_companion = Regex::new(
+            &codecommit
+                .detector
+                .companion
+                .as_ref()
+                .expect("codecommit companion missing")
+                .regex,
+        )
+        .unwrap();
+        assert!(
+            codecommit_companion
+                .is_match("CODECOMMIT_PASSWORD=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789/+==")
+        );
+        assert!(!codecommit_companion.is_match("AbCdEfGhIjKlMnOpQrStUvWxYz0123456789/+=="));
     }
 }

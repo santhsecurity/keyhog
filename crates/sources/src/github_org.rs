@@ -19,6 +19,16 @@ use crate::FilesystemSource;
 const GIT_CLONE_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Scans all repositories in a GitHub organization by shallow-cloning them to a temp directory.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::Source;
+/// use keyhog_sources::GitHubOrgSource;
+///
+/// let source = GitHubOrgSource::new("acme".into(), "ghp_example".into());
+/// assert_eq!(source.name(), "github-org");
+/// ```
 pub struct GitHubOrgSource {
     org: String,
     token: String,
@@ -26,6 +36,16 @@ pub struct GitHubOrgSource {
 
 impl GitHubOrgSource {
     /// Create a source that scans all repositories in a GitHub organization.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::Source;
+    /// use keyhog_sources::GitHubOrgSource;
+    ///
+    /// let source = GitHubOrgSource::new("acme".into(), "ghp_example".into());
+    /// assert_eq!(source.name(), "github-org");
+    /// ```
     pub fn new(org: String, token: String) -> Self {
         Self { org, token }
     }
@@ -373,11 +393,17 @@ mod tests {
 
     #[test]
     fn rewrite_chunk_path_rewrites_metadata() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let clone_root = temp_dir.path().join("widgets");
+        let file_path = clone_root.join("src").join("main.rs");
+        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        std::fs::write(&file_path, "secret").unwrap();
+
         let chunk = Chunk {
             data: "secret".into(),
             metadata: ChunkMetadata {
                 source_type: "filesystem".into(),
-                path: Some("/tmp/acme/widgets/src/main.rs".into()),
+                path: Some(file_path.to_string_lossy().into_owned()),
                 commit: Some("abc".into()),
                 author: Some("dev".into()),
                 date: None,
@@ -385,7 +411,7 @@ mod tests {
         };
 
         let rewritten =
-            rewrite_chunk_path(chunk, "acme", "widgets", Path::new("/tmp/acme/widgets"));
+            rewrite_chunk_path(chunk, "acme", "widgets", &clone_root);
 
         assert_eq!(rewritten.metadata.source_type, "github-org");
         assert_eq!(

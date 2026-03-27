@@ -172,6 +172,16 @@ fn shannon_entropy(data: &[u8]) -> f64 {
 
 /// Score a (text, context) pair using the trained classifier.
 /// Returns probability this is a real secret: 0.0 (definitely not) to 1.0 (definitely yes).
+/// Score a candidate secret and its surrounding context.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::ml_scorer::score;
+///
+/// let key = format!("sk_live_{}", "abcdefghijklmnopqrstuvwxyz1234");
+/// assert!(score(&key, "API_KEY=") > 0.0);
+/// ```
 pub fn score(text: &str, context: &str) -> f64 {
     if text.is_empty() {
         return 0.0;
@@ -201,11 +211,29 @@ pub fn score(text: &str, context: &str) -> f64 {
 }
 
 /// Return the embedded model version string for diagnostics and CLI output.
+/// Return the embedded model version string.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::ml_scorer::model_version;
+///
+/// assert!(!model_version().is_empty());
+/// ```
 pub fn model_version() -> &'static str {
     ml_weights::MODEL_VERSION
 }
 
 /// Public entry point for feature extraction (used by GPU batch inference).
+/// Compute the public ML feature vector for a candidate.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::ml_scorer::compute_features_public;
+///
+/// assert_eq!(compute_features_public("", "").len(), 41);
+/// ```
 pub fn compute_features_public(text: &str, context: &str) -> [f32; NUM_FEATURES] {
     if text.is_empty() {
         return [0.0f32; NUM_FEATURES];

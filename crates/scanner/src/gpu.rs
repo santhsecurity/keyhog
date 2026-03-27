@@ -156,6 +156,14 @@ mod backend {
         }
     }
 
+    /// Return the lazily initialized GPU context when GPU inference is available.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use keyhog_scanner::gpu::get_gpu;
+    /// let _ = get_gpu();
+    /// ```
     pub fn get_gpu() -> Option<&'static GpuContext> {
         GPU.get_or_init(|| match init_gpu() {
             Ok(ctx) => {
@@ -171,6 +179,14 @@ mod backend {
     }
 
     /// Score a batch of feature vectors on GPU. Returns one score per input.
+    /// Score a batch of precomputed feature vectors on the GPU.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use keyhog_scanner::gpu::batch_score_features;
+    /// let _ = batch_score_features(&[[0.0; 41]]);
+    /// ```
     pub fn batch_score_features(features: &[[f32; INPUT_DIM]]) -> Option<Vec<f64>> {
         if features.len() < GPU_BATCH_THRESHOLD {
             return None; // Too small for GPU, caller should use CPU
@@ -404,6 +420,15 @@ fn moe_forward(@builtin(global_invocation_id) gid: vec3<u32>) {
 ///
 /// Uses GPU compute shaders when available and the batch is large enough.
 /// Falls back to CPU for small batches or when no GPU is present.
+/// Score a batch of `(text, context)` candidates, using GPU when available.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use keyhog_scanner::gpu::batch_ml_inference;
+/// let scores = batch_ml_inference(&[("demo_ABC12345".into(), "API_KEY=".into())]);
+/// assert_eq!(scores.len(), 1);
+/// ```
 pub fn batch_ml_inference(candidates: &[(String, String)]) -> Vec<f64> {
     if candidates.is_empty() {
         return Vec::new();
@@ -440,6 +465,14 @@ pub fn batch_ml_inference(candidates: &[(String, String)]) -> Vec<f64> {
 }
 
 /// Check if GPU acceleration is available.
+/// Return `true` when GPU scoring support is available in this build/runtime.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::gpu::gpu_available;
+/// let _ = gpu_available();
+/// ```
 pub fn gpu_available() -> bool {
     #[cfg(feature = "gpu")]
     {

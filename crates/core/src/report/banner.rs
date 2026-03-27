@@ -160,6 +160,14 @@ fn supports_true_color() -> bool {
 /// 1. A braille-dot keyhole icon with amber gradient coloring
 /// 2. Wide-spaced "K E Y H O G" text
 /// 3. Version and detector count
+///
+/// # Examples
+///
+/// ```rust
+/// let mut out = Vec::new();
+/// keyhog_core::banner::print_banner(&mut out, false, false).unwrap();
+/// assert!(!out.is_empty());
+/// ```
 pub fn print_banner<W: Write>(w: &mut W, color: bool, animate: bool) -> std::io::Result<()> {
     let true_color = color && supports_true_color();
     let braille_rows = pack_braille();

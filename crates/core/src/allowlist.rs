@@ -17,6 +17,15 @@ use std::path::Path;
 use crate::VerifiedFinding;
 
 /// User-defined suppressions loaded from `.keyhogignore`: credential hashes, detector IDs, and path globs.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::allowlist::Allowlist;
+///
+/// let allowlist = Allowlist::parse("detector:demo-token\npath:**/*.md\n");
+/// assert!(allowlist.ignored_detectors.contains("demo-token"));
+/// ```
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Allowlist {
     /// SHA-256 hashes of credentials to ignore.
@@ -29,6 +38,15 @@ pub struct Allowlist {
 
 impl Allowlist {
     /// Create an empty allowlist with no suppressed hashes, detectors, or paths.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::allowlist::Allowlist;
+    ///
+    /// let allowlist = Allowlist::empty();
+    /// assert!(allowlist.ignored_paths.is_empty());
+    /// ```
     pub fn empty() -> Self {
         Self {
             credential_hashes: HashSet::new(),
@@ -38,12 +56,30 @@ impl Allowlist {
     }
 
     /// Load from a .keyhogignore file.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use keyhog_core::allowlist::Allowlist;
+    /// use std::path::Path;
+    ///
+    /// let _allowlist = Allowlist::load(Path::new(".keyhogignore")).unwrap();
+    /// ```
     pub fn load(path: &Path) -> Result<Self, std::io::Error> {
         let contents = std::fs::read_to_string(path)?;
         Ok(Self::parse(&contents))
     }
 
     /// Parse allowlist from string content.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::allowlist::Allowlist;
+    ///
+    /// let allowlist = Allowlist::parse("path:**/.env\ndetector:demo-token\n");
+    /// assert!(allowlist.is_path_ignored("app/.env"));
+    /// ```
     pub fn parse(content: &str) -> Self {
         let mut al = Self::empty();
         for line in content.lines() {
@@ -68,6 +104,38 @@ impl Allowlist {
     ///
     /// Hash-based suppression is evaluated earlier on [`crate::RawMatch`] values
     /// because [`VerifiedFinding`] stores only redacted credentials.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::allowlist::Allowlist;
+    /// use keyhog_core::{MatchLocation, Severity, VerificationResult, VerifiedFinding};
+    /// use std::collections::HashMap;
+    ///
+    /// let allowlist = Allowlist::parse("detector:demo-token\n");
+    /// let finding = VerifiedFinding {
+    ///     detector_id: "demo-token".into(),
+    ///     detector_name: "Demo Token".into(),
+    ///     service: "demo".into(),
+    ///     severity: Severity::High,
+    ///     credential_redacted: "demo_...1234".into(),
+    ///     location: MatchLocation {
+    ///         source: "filesystem".into(),
+    ///         file_path: Some(".env".into()),
+    ///         line: Some(1),
+    ///         offset: 0,
+    ///         commit: None,
+    ///         author: None,
+    ///         date: None,
+    ///     },
+    ///     verification: VerificationResult::Skipped,
+    ///     metadata: HashMap::new(),
+    ///     additional_locations: Vec::new(),
+    ///     confidence: None,
+    /// };
+    ///
+    /// assert!(allowlist.is_allowed(&finding));
+    /// ```
     pub fn is_allowed(&self, finding: &VerifiedFinding) -> bool {
         let detector_allowed = self.ignored_detectors.contains(&finding.detector_id);
         let path_allowed = finding.location.file_path.as_ref().is_some_and(|path| {
@@ -81,12 +149,30 @@ impl Allowlist {
     }
 
     /// Check if a raw credential hash is allowlisted.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::allowlist::Allowlist;
+    ///
+    /// let allowlist = Allowlist::parse("");
+    /// assert!(!allowlist.is_hash_allowed("demo_ABC12345"));
+    /// ```
     pub fn is_hash_allowed(&self, credential: &str) -> bool {
         let hash = sha256_digest(credential);
         self.credential_hashes.contains(&hash)
     }
 
     /// Check whether a raw path matches an ignored-path glob.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::allowlist::Allowlist;
+    ///
+    /// let allowlist = Allowlist::parse("path:**/*.md\n");
+    /// assert!(allowlist.is_path_ignored("docs/README.md"));
+    /// ```
     pub fn is_path_ignored(&self, path: &str) -> bool {
         let normalized = normalize_path(path);
         self.ignored_paths

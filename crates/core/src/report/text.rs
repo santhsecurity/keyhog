@@ -9,6 +9,15 @@ use super::banner;
 use super::{ReportError, Reporter};
 
 /// Human-readable text output with gradient banner and styled findings.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::TextReporter;
+///
+/// let reporter = TextReporter::with_color(Vec::new(), false);
+/// let _ = reporter;
+/// ```
 pub struct TextReporter<W: Write> {
     writer: W,
     count: usize,
@@ -19,11 +28,29 @@ pub struct TextReporter<W: Write> {
 
 impl<W: Write> TextReporter<W> {
     /// Create a text reporter with ANSI colors enabled when stdout is a TTY.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::TextReporter;
+    ///
+    /// let reporter = TextReporter::new(Vec::new());
+    /// let _ = reporter;
+    /// ```
     pub fn new(writer: W) -> Self {
         Self::with_color(writer, std::io::stdout().is_terminal())
     }
 
     /// Create a text reporter with explicit ANSI color control.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::TextReporter;
+    ///
+    /// let reporter = TextReporter::with_color(Vec::new(), false);
+    /// let _ = reporter;
+    /// ```
     pub fn with_color(writer: W, color: bool) -> Self {
         Self {
             writer,

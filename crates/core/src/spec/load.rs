@@ -4,19 +4,53 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use super::{DetectorFile, DetectorSpec, PatternSpec, QualityIssue, SpecError, validate_detector};
 
+const DETECTOR_CACHE_VERSION: u32 = 2;
+
+#[derive(Serialize, Deserialize)]
+struct DetectorCacheFile {
+    version: u32,
+    detectors: Vec<DetectorSpec>,
+}
+
 /// Save detectors to a JSON cache file for fast subsequent loads.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use keyhog_core::{DetectorSpec, save_detector_cache};
+/// use std::path::Path;
+///
+/// let detectors: Vec<DetectorSpec> = Vec::new();
+/// save_detector_cache(&detectors, Path::new(".keyhog-cache.json")).unwrap();
+/// ```
 pub fn save_detector_cache(
     detectors: &[DetectorSpec],
     cache_path: &Path,
 ) -> Result<(), std::io::Error> {
-    let json = serde_json::to_vec(detectors)?;
+    let json = serde_json::to_vec(&DetectorCacheFile {
+        version: DETECTOR_CACHE_VERSION,
+        detectors: detectors.to_vec(),
+    })?;
     std::fs::write(cache_path, json)
 }
 
 /// Load detectors from a JSON cache file. Returns None if cache is stale or missing.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use keyhog_core::load_detector_cache;
+/// use std::path::Path;
+///
+/// let _cached = load_detector_cache(
+///     Path::new(".keyhog-cache.json"),
+///     Path::new("detectors"),
+/// );
+/// ```
 ///
 /// # Security
 ///
@@ -43,10 +77,14 @@ pub fn load_detector_cache(cache_path: &Path, source_dir: &Path) -> Option<Vec<D
     }
 
     let data = std::fs::read(cache_path).ok()?;
-    let detectors: Vec<DetectorSpec> = serde_json::from_slice(&data).ok()?;
+    let cache: DetectorCacheFile = serde_json::from_slice(&data).ok()?;
+    if cache.version != DETECTOR_CACHE_VERSION {
+        return None;
+    }
 
     // Re-validate cached detectors to prevent cache poisoning.
-    let validated: Vec<DetectorSpec> = detectors
+    let validated: Vec<DetectorSpec> = cache
+        .detectors
         .into_iter()
         .filter(|spec| {
             let issues = validate_detector(spec);
@@ -73,12 +111,31 @@ pub fn load_detector_cache(cache_path: &Path, source_dir: &Path) -> Option<Vec<D
 
 /// Load all detector specs from a directory of TOML files.
 /// Runs quality gate on each detector. Rejects detectors with errors, warns on issues.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use keyhog_core::load_detectors;
+/// use std::path::Path;
+///
+/// let detectors = load_detectors(Path::new("detectors")).unwrap();
+/// assert!(!detectors.is_empty());
+/// ```
 pub fn load_detectors(dir: &Path) -> Result<Vec<DetectorSpec>, SpecError> {
     load_detectors_with_gate(dir, true)
 }
 
 /// Load detectors with optional quality gate enforcement.
 /// When `enforce_gate` is `true`, detectors with quality errors are skipped.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use keyhog_core::load_detectors_with_gate;
+/// use std::path::Path;
+///
+/// let _detectors = load_detectors_with_gate(Path::new("detectors"), true).unwrap();
+/// ```
 pub fn load_detectors_with_gate(
     dir: &Path,
     enforce_gate: bool,
@@ -229,7 +286,7 @@ pub(super) fn inject_github_classic_pat_detector(detectors: &mut Vec<DetectorSpe
     compat.name = "GitHub Classic PAT".into();
     compat.keywords = vec!["ghp_".into(), "github".into()];
     compat.patterns = vec![PatternSpec {
-        regex: "ghp_[a-zA-Z0-9]{36}".into(),
+        regex: "ghp_[a-zA-Z0-9]{36,40}".into(),
         description: Some("GitHub classic personal access token".into()),
         group: None,
     }];

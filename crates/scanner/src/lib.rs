@@ -81,7 +81,8 @@ const MIN_FALLBACK_LINE_LENGTH: usize = 8;
 
 /// Minimum AC literal prefix length. Shorter prefixes (e.g., "1", "x", "_")
 /// match too many positions and degrade Aho-Corasick throughput.
-const FIRST_CAPTURE_GROUP_INDEX: usize = 0;
+const FULL_MATCH_INDEX: usize = 0;
+const FIRST_CAPTURE_GROUP_INDEX: usize = 1;
 const FIRST_LINE_NUMBER: usize = 1;
 const PREVIOUS_LINE_DISTANCE: usize = 1;
 const MIN_LITERAL_PREFIX_CHARS: usize = 3;
@@ -163,18 +164,35 @@ type ScannerPreprocessedText = PreprocessedText;
 
 #[derive(Debug, Error)]
 /// Errors returned while compiling detector patterns into a scanner.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::ScanError;
+///
+/// let error = ScanError::RegexSetCompile(regex::Error::Syntax("bad regex".into()));
+/// assert!(error.to_string().contains("Fix"));
+/// ```
 pub enum ScanError {
-    #[error("failed to compile regex for detector {detector_id} pattern {index}: {source}")]
+    #[error(
+        "failed to compile regex for detector {detector_id} pattern {index}: {source}. Fix: correct the detector regex or capture group configuration"
+    )]
     RegexCompile {
         detector_id: String,
         index: usize,
         source: regex::Error,
     },
-    #[error("failed to compile scanner regex set: {0}")]
+    #[error(
+        "failed to compile scanner regex set: {0}. Fix: simplify the detector regex set or remove the invalid pattern"
+    )]
     RegexSetCompile(#[from] regex::Error),
-    #[error("failed to build multimatch automaton: {0}")]
+    #[error(
+        "failed to build multimatch automaton: {0}. Fix: reduce detector complexity or remove unsupported regex constructs"
+    )]
     Multimatch(#[from] MatchError),
-    #[error("failed to build Aho-Corasick automaton: {0}")]
+    #[error(
+        "failed to build Aho-Corasick automaton: {0}. Fix: shorten overly broad prefixes or reduce detector count"
+    )]
     AhoCorasick(#[from] aho_corasick::BuildError),
 }
 
@@ -188,12 +206,49 @@ struct CompiledPattern {
 /// An optional compiled companion pattern for a detector.
 struct CompiledCompanion {
     regex: Regex,
+    capture_group: Option<usize>,
     within_lines: usize,
 }
 
 /// The compiled scanner: all detector patterns fused into a single
 /// Aho-Corasick automaton for prefiltering, backed by individual
 /// regexes for extraction.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::{Chunk, ChunkMetadata, DetectorSpec, PatternSpec, Severity};
+/// use keyhog_scanner::CompiledScanner;
+///
+/// let scanner = CompiledScanner::compile(vec![DetectorSpec {
+///     id: "demo-token".into(),
+///     name: "Demo Token".into(),
+///     service: "demo".into(),
+///     severity: Severity::High,
+///     patterns: vec![PatternSpec {
+///         regex: "demo_[A-Z0-9]{8}".into(),
+///         description: None,
+///         group: None,
+///     }],
+///     companion: None,
+///     verify: None,
+///     keywords: vec!["demo_".into()],
+/// }])
+/// .unwrap();
+///
+/// let chunk = Chunk {
+///     data: "TOKEN=demo_ABC12345".into(),
+///     metadata: ChunkMetadata {
+///         source_type: "filesystem".into(),
+///         path: Some(".env".into()),
+///         commit: None,
+///         author: None,
+///         date: None,
+///     },
+/// };
+///
+/// assert_eq!(scanner.scan(&chunk).len(), 1);
+/// ```
 pub struct CompiledScanner {
     /// Pattern matcher built from literal prefixes of patterns.
     ac: Option<PatternSet>,
@@ -233,6 +288,31 @@ pub struct CompiledScanner {
 
 impl CompiledScanner {
     /// Compile all detector specs into a single scanner.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::{DetectorSpec, PatternSpec, Severity};
+    /// use keyhog_scanner::CompiledScanner;
+    ///
+    /// let scanner = CompiledScanner::compile(vec![DetectorSpec {
+    ///     id: "demo-token".into(),
+    ///     name: "Demo Token".into(),
+    ///     service: "demo".into(),
+    ///     severity: Severity::High,
+    ///     patterns: vec![PatternSpec {
+    ///         regex: "demo_[A-Z0-9]{8}".into(),
+    ///         description: None,
+    ///         group: None,
+    ///     }],
+    ///     companion: None,
+    ///     verify: None,
+    ///     keywords: vec!["demo_".into()],
+    /// }])
+    /// .unwrap();
+    ///
+    /// assert_eq!(scanner.detector_count(), 1);
+    /// ```
     pub fn compile(detectors: Vec<DetectorSpec>) -> Result<Self, ScanError> {
         let CompileState {
             ac_literals,
@@ -312,11 +392,61 @@ impl CompiledScanner {
     }
 
     /// Number of loaded detectors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::{DetectorSpec, PatternSpec, Severity};
+    /// use keyhog_scanner::CompiledScanner;
+    ///
+    /// let scanner = CompiledScanner::compile(vec![DetectorSpec {
+    ///     id: "demo-token".into(),
+    ///     name: "Demo Token".into(),
+    ///     service: "demo".into(),
+    ///     severity: Severity::High,
+    ///     patterns: vec![PatternSpec {
+    ///         regex: "demo_[A-Z0-9]{8}".into(),
+    ///         description: None,
+    ///         group: None,
+    ///     }],
+    ///     companion: None,
+    ///     verify: None,
+    ///     keywords: vec!["demo_".into()],
+    /// }])
+    /// .unwrap();
+    ///
+    /// assert_eq!(scanner.detector_count(), 1);
+    /// ```
     pub fn detector_count(&self) -> usize {
         self.detectors.len()
     }
 
     /// Total number of patterns (AC + fallback).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::{DetectorSpec, PatternSpec, Severity};
+    /// use keyhog_scanner::CompiledScanner;
+    ///
+    /// let scanner = CompiledScanner::compile(vec![DetectorSpec {
+    ///     id: "demo-token".into(),
+    ///     name: "Demo Token".into(),
+    ///     service: "demo".into(),
+    ///     severity: Severity::High,
+    ///     patterns: vec![PatternSpec {
+    ///         regex: "demo_[A-Z0-9]{8}".into(),
+    ///         description: None,
+    ///         group: None,
+    ///     }],
+    ///     companion: None,
+    ///     verify: None,
+    ///     keywords: vec!["demo_".into()],
+    /// }])
+    /// .unwrap();
+    ///
+    /// assert_eq!(scanner.pattern_count(), 1);
+    /// ```
     pub fn pattern_count(&self) -> usize {
         self.ac_map.len() + self.fallback.len()
     }
@@ -333,6 +463,42 @@ impl CompiledScanner {
     /// Scan a chunk of text and return all raw credential matches.
     /// Applies multi-line preprocessing to detect secrets split across lines.
     /// Large chunks are split into overlapping windows for bounded scan time.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::{Chunk, ChunkMetadata, DetectorSpec, PatternSpec, Severity};
+    /// use keyhog_scanner::CompiledScanner;
+    ///
+    /// let scanner = CompiledScanner::compile(vec![DetectorSpec {
+    ///     id: "demo-token".into(),
+    ///     name: "Demo Token".into(),
+    ///     service: "demo".into(),
+    ///     severity: Severity::High,
+    ///     patterns: vec![PatternSpec {
+    ///         regex: "demo_[A-Z0-9]{8}".into(),
+    ///         description: None,
+    ///         group: None,
+    ///     }],
+    ///     companion: None,
+    ///     verify: None,
+    ///     keywords: vec!["demo_".into()],
+    /// }])
+    /// .unwrap();
+    ///
+    /// let matches = scanner.scan(&Chunk {
+    ///     data: "TOKEN=demo_ABC12345".into(),
+    ///     metadata: ChunkMetadata {
+    ///         source_type: "filesystem".into(),
+    ///         path: Some(".env".into()),
+    ///         commit: None,
+    ///         author: None,
+    ///         date: None,
+    ///     },
+    /// });
+    ///
+    /// assert_eq!(matches.len(), 1);
+    /// ```
     pub fn scan(&self, chunk: &Chunk) -> Vec<RawMatch> {
         // For large chunks, split into overlapping windows.
         let mut matches = if chunk.data.len() > Self::MAX_SCAN_CHUNK {
@@ -596,9 +762,6 @@ impl CompiledScanner {
         if is_within_hex_context(data, match_start, match_end) {
             return;
         }
-        if context::is_known_example_credential(credential) {
-            return;
-        }
         let line = match_line_number(preprocessed, line_offsets, match_start);
         if context::is_false_positive_context(
             code_lines,
@@ -608,6 +771,19 @@ impl CompiledScanner {
             data,
             match_start,
             chunk.metadata.path.as_deref(),
+        ) {
+            return;
+        }
+        let inferred_context = context::infer_context_with_documentation(
+            code_lines,
+            line.saturating_sub(PREVIOUS_LINE_DISTANCE),
+            chunk.metadata.path.as_deref(),
+            documentation_lines,
+        );
+        if should_suppress_known_example_credential(
+            credential,
+            chunk.metadata.path.as_deref(),
+            inferred_context,
         ) {
             return;
         }
@@ -875,7 +1051,7 @@ impl CompiledScanner {
         // Single-pass search covers both structural and multiline-joined patterns.
         let search_text = &preprocessed.text;
         for caps in entry.regex.captures_iter(search_text) {
-            let Some(full_match) = caps.get(FIRST_CAPTURE_GROUP_INDEX) else {
+            let Some(full_match) = caps.get(FULL_MATCH_INDEX) else {
                 continue;
             };
             let credential = caps
@@ -1337,6 +1513,21 @@ fn build_raw_match(
     }
 }
 
+fn should_suppress_known_example_credential(
+    credential: &str,
+    file_path: Option<&str>,
+    inferred_context: context::CodeContext,
+) -> bool {
+    if !context::is_known_example_credential(credential) {
+        return false;
+    }
+
+    let sensitive_file = file_path
+        .map(confidence::is_sensitive_path)
+        .unwrap_or(false);
+    !(sensitive_file && matches!(inferred_context, context::CodeContext::Assignment))
+}
+
 #[cfg(feature = "ml")]
 fn cached_ml_score(
     ml_score_cache: &mut HashMap<(String, String), f64>,
@@ -1493,7 +1684,11 @@ fn find_companion(
         line_window_offsets(preprocessed, start + FIRST_LINE_NUMBER, end)?;
     let haystack = &preprocessed.text[window_start..window_end];
 
-    for m in companion.regex.find_iter(haystack) {
+    for captures in companion.regex.captures_iter(haystack) {
+        let Some(m) = captures.get(companion.capture_group.unwrap_or(FIRST_CAPTURE_GROUP_INDEX))
+        else {
+            continue;
+        };
         if m.len() > 4096 {
             continue; // Prevent memory issues from excessively long companion matches
         }
@@ -1658,8 +1853,10 @@ fn compile_companion(
             index: FIRST_CAPTURE_GROUP_INDEX,
             source: e,
         })?;
+    let capture_group = (regex.captures_len() > 1).then_some(FIRST_CAPTURE_GROUP_INDEX);
     Ok(CompiledCompanion {
         regex,
+        capture_group,
         within_lines: spec.within_lines,
     })
 }
@@ -1746,7 +1943,7 @@ mod tests {
                 group: None,
             }],
             companion: Some(CompanionSpec {
-                regex: "[0-9a-zA-Z/+=]{40}".into(),
+                regex: "AWS_SECRET_ACCESS_KEY[=:\\s]+([0-9a-zA-Z/+=]{40})".into(),
                 within_lines: 3,
                 name: "secret_key".into(),
             }),
@@ -1755,13 +1952,43 @@ mod tests {
         };
 
         let scanner = CompiledScanner::compile(vec![detector]).unwrap();
+        let access_key = format!("AKIA{}", "R7VXNPLMQ3HSKWJT");
+        let secret_key = format!("kR4vN8pW2cF6gH0j{}", "L3mQsT7uX9yAbDe12fG5nP8Z");
         let chunk = make_chunk(
-            "AWS_ACCESS_KEY_ID=AKIAR7VXNPLMQ3HSKWJT\nAWS_SECRET_ACCESS_KEY=kR4vN8pW2cF6gH0jL3mQsT7uX9yAbDe12fG5nP8",
+            &format!("AWS_ACCESS_KEY_ID={access_key}\nAWS_SECRET_ACCESS_KEY={secret_key}"),
         );
         let matches = scanner.scan(&chunk);
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].credential, "AKIAR7VXNPLMQ3HSKWJT");
+        assert_eq!(matches[0].credential, access_key);
         assert!(matches[0].companion.is_some());
+    }
+
+    #[test]
+    fn scan_extracts_captured_companion_value_without_anchor_text() {
+        let detector = DetectorSpec {
+            id: "anchored-companion".into(),
+            name: "Anchored Companion".into(),
+            service: "test".into(),
+            severity: Severity::High,
+            patterns: vec![PatternSpec {
+                regex: "client_id[=:\\s\"']+([a-z0-9]{8})".into(),
+                description: None,
+                group: Some(1),
+            }],
+            companion: Some(CompanionSpec {
+                regex: "client_secret[=:\\s\"']+([A-Za-z0-9]{16})".into(),
+                within_lines: 1,
+                name: "client_secret".into(),
+            }),
+            verify: None,
+            keywords: vec!["client_id".into(), "client_secret".into()],
+        };
+
+        let scanner = CompiledScanner::compile(vec![detector]).unwrap();
+        let chunk = make_chunk("client_id=deadbeef\nclient_secret=ABCDEFGHIJKLMNOP");
+        let matches = scanner.scan(&chunk);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].companion.as_deref(), Some("ABCDEFGHIJKLMNOP"));
     }
 
     #[test]
@@ -1784,6 +2011,39 @@ mod tests {
         let scanner = CompiledScanner::compile(vec![detector]).unwrap();
         let chunk = make_chunk("");
         assert!(scanner.scan(&chunk).is_empty());
+    }
+
+    #[test]
+    fn known_example_aws_key_is_allowed_in_sensitive_assignment_file() {
+        let detector = DetectorSpec {
+            id: "aws-key".into(),
+            name: "AWS Key".into(),
+            service: "aws".into(),
+            severity: Severity::Critical,
+            patterns: vec![PatternSpec {
+                regex: "AKIA[0-9A-Z]{16}".into(),
+                description: None,
+                group: None,
+            }],
+            companion: None,
+            verify: None,
+            keywords: vec!["AKIA".into()],
+        };
+        let scanner = CompiledScanner::compile(vec![detector]).unwrap();
+        let chunk = Chunk {
+            data: "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n".into(),
+            metadata: ChunkMetadata {
+                source_type: "test".into(),
+                path: Some("aws.env".into()),
+                commit: None,
+                author: None,
+                date: None,
+            },
+        };
+
+        let matches = scanner.scan(&chunk);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].credential, "AKIAIOSFODNN7EXAMPLE");
     }
 
     #[test]
@@ -2007,12 +2267,13 @@ mod tests {
         };
 
         let scanner = CompiledScanner::compile(vec![detector]).unwrap();
+        let access_key = format!("AKIA{}", "R7VXNPLMQ3HSKWJT");
         let chunk = make_chunk(
-            "AWS_ACCESS_KEY_ID = \"AKIA\" + \"R7VXNPLMQ3HSKWJT\"\nAWS_SECRET_ACCESS_KEY = \"kR4vN8pW2cF6gH0jL3mQsT7uX9yAbDe12fG5nP8\"",
+            &format!("AWS_ACCESS_KEY_ID = \"AKIA\" + \"R7VXNPLMQ3HSKWJT\"\nAWS_SECRET_ACCESS_KEY = \"kR4vN8pW2cF6gH0jL3mQsT7uX9yAbDe12fG5nP8\""),
         );
         let matches = scanner.scan(&chunk);
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].credential, "AKIAR7VXNPLMQ3HSKWJT");
+        assert_eq!(matches[0].credential, access_key);
         // Note: companion may or may not be found depending on multiline
         // preprocessing — the line structure changes after joining string
         // concatenations, which can shift the companion out of within_lines range.

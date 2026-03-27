@@ -20,6 +20,14 @@ const DOCSTRING_TOGGLE_REMAINDER: usize = 2;
 const DOCSTRING_TOGGLE_MATCH: usize = 1;
 
 /// The structural context of a code location.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::context::CodeContext;
+///
+/// assert!(matches!(CodeContext::Assignment, CodeContext::Assignment));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CodeContext {
     /// Direct assignment: key = value, key: value, KEY=value
@@ -41,6 +49,14 @@ pub enum CodeContext {
 impl CodeContext {
     /// Confidence multiplier for this context.
     /// Assignment = boost. Test/comment/encrypted = reduce.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_scanner::context::CodeContext;
+    ///
+    /// assert!(CodeContext::Documentation.confidence_multiplier() < 1.0);
+    /// ```
     pub fn confidence_multiplier(&self) -> f64 {
         match self {
             Self::Assignment => ASSIGNMENT_CONFIDENCE_MULTIPLIER,
@@ -55,12 +71,29 @@ impl CodeContext {
 }
 
 /// Infer the structural context of a match at a given line.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::context::{CodeContext, infer_context};
+///
+/// let lines = vec!["API_KEY=demo_ABC12345"];
+/// assert!(matches!(infer_context(&lines, 0, Some(".env")), CodeContext::Assignment));
+/// ```
 pub fn infer_context(lines: &[&str], line_idx: usize, file_path: Option<&str>) -> CodeContext {
     let documentation_lines = documentation_line_flags(lines);
     infer_context_with_documentation(lines, line_idx, file_path, &documentation_lines)
 }
 
 /// Returns true if the match is in a context that indicates a false positive (lockfile, regex def, etc).
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::context::is_false_positive_match_context;
+///
+/// assert!(is_false_positive_match_context("sha256-integrity abcdef", 0, Some("package-lock.json")));
+/// ```
 pub fn is_false_positive_match_context(
     text: &str,
     match_start: usize,
@@ -86,6 +119,14 @@ pub fn is_false_positive_match_context(
 /// Matching is exact and case-sensitive for prefixed keys (AWS, GitHub, Stripe)
 /// and case-insensitive for hex hashes. This is a credential-value check, not a
 /// context check — it runs before expensive context analysis.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::context::is_known_example_credential;
+///
+/// assert!(is_known_example_credential("AKIAIOSFODNN7EXAMPLE"));
+/// ```
 pub fn is_known_example_credential(credential: &str) -> bool {
     // AWS official example keys from documentation
     if credential == "AKIAIOSFODNN7EXAMPLE"
@@ -279,6 +320,16 @@ fn is_hex_sequential_placeholder(credential: &str) -> bool {
 }
 
 /// Returns true if the match at the given line should be suppressed as a false positive.
+/// Check whether a line-level match sits in known false-positive context.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::context::is_false_positive_context;
+///
+/// let lines = vec!["version https://git-lfs.github.com/spec/v1"];
+/// assert!(is_false_positive_context(&lines, 0, Some(".gitattributes")));
+/// ```
 pub fn is_false_positive_context(lines: &[&str], line_idx: usize, file_path: Option<&str>) -> bool {
     let path_lower = file_path.map(str::to_ascii_lowercase);
     is_false_positive_context_with_path(lines, line_idx, path_lower.as_deref())
@@ -286,6 +337,16 @@ pub fn is_false_positive_context(lines: &[&str], line_idx: usize, file_path: Opt
 
 /// Same as `is_false_positive_context` but accepts a pre-lowered path to avoid
 /// re-allocating for every match in the same chunk.
+/// Variant of [`is_false_positive_context`] that accepts an owned path hint.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::context::is_false_positive_context_with_path;
+///
+/// let lines = vec!["version https://git-lfs.github.com/spec/v1"];
+/// assert!(is_false_positive_context_with_path(&lines, 0, Some(".gitattributes")));
+/// ```
 pub fn is_false_positive_context_with_path(
     lines: &[&str],
     line_idx: usize,
@@ -308,6 +369,17 @@ pub fn is_false_positive_context_with_path(
 }
 
 /// Infer the structural context of a match, considering documentation blocks.
+/// Infer context when documentation-line flags have already been computed.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::context::{CodeContext, documentation_line_flags, infer_context_with_documentation};
+///
+/// let lines = vec!["API_KEY=demo_ABC12345"];
+/// let docs = documentation_line_flags(&lines);
+/// assert!(matches!(infer_context_with_documentation(&lines, 0, Some(".env"), &docs), CodeContext::Assignment));
+/// ```
 pub fn infer_context_with_documentation(
     lines: &[&str],
     line_idx: usize,
@@ -349,6 +421,16 @@ pub fn infer_context_with_documentation(
 }
 
 /// Pre-compute which lines are inside documentation blocks (markdown fences, docstrings).
+/// Mark lines that appear to be documentation or docstrings.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::context::documentation_line_flags;
+///
+/// let flags = documentation_line_flags(&["# Example", "token = value"]);
+/// assert_eq!(flags.len(), 2);
+/// ```
 pub fn documentation_line_flags(lines: &[&str]) -> Vec<bool> {
     let mut flags = vec![false; lines.len()];
     let mut in_markdown_code_block = false;

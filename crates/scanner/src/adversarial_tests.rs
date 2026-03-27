@@ -337,8 +337,9 @@ fn multiple_secrets_on_same_line_all_detected() {
         keywords: vec!["AKIA".into()],
     };
     let scanner = CompiledScanner::compile(vec![detector1, detector2]).unwrap();
+    let aws_key = format!("AKIA{}", "R7VXNPLMQ3HSKWJT");
     let chunk = make_chunk(
-        "SLACK=xoxb-1234567890-1234567890-abcdefghijABCDEFGHIJklmn AWS=AKIAR7VXNPLMQ3HSKWJT\n",
+        &format!("SLACK=xoxb-1234567890-1234567890-abcdefghijABCDEFGHIJklmn AWS={aws_key}\n"),
     );
     let matches = scanner.scan(&chunk);
     assert!(

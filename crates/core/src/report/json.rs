@@ -8,12 +8,30 @@ use crate::VerifiedFinding;
 use super::{ReportError, Reporter};
 
 /// One JSON object per line (JSONL).
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::JsonlReporter;
+///
+/// let reporter = JsonlReporter::new(Vec::new());
+/// let _ = reporter;
+/// ```
 pub struct JsonlReporter<W: Write> {
     writer: W,
 }
 
 impl<W: Write> JsonlReporter<W> {
     /// Create a JSON Lines reporter.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::JsonlReporter;
+    ///
+    /// let reporter = JsonlReporter::new(Vec::new());
+    /// let _ = reporter;
+    /// ```
     pub fn new(writer: W) -> Self {
         Self { writer }
     }
@@ -33,6 +51,15 @@ impl<W: Write> Reporter for JsonlReporter<W> {
 }
 
 /// Full JSON array output.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_core::JsonReporter;
+///
+/// let reporter = JsonReporter::new(Vec::new());
+/// let _ = reporter;
+/// ```
 pub struct JsonReporter<W: Write> {
     writer: W,
     findings: Vec<VerifiedFinding>,
@@ -40,6 +67,15 @@ pub struct JsonReporter<W: Write> {
 
 impl<W: Write> JsonReporter<W> {
     /// Create a JSON array reporter.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use keyhog_core::JsonReporter;
+    ///
+    /// let reporter = JsonReporter::new(Vec::new());
+    /// let _ = reporter;
+    /// ```
     pub fn new(writer: W) -> Self {
         Self {
             writer,

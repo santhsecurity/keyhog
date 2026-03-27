@@ -4,6 +4,15 @@
 //! have characteristic entropy profiles that help separate true positives.
 
 /// Shannon entropy in bits per byte. Range: 0.0 (constant) to 8.0 (perfectly random).
+/// Compute Shannon entropy in bits per byte.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::entropy::shannon_entropy;
+///
+/// assert_eq!(shannon_entropy(b""), 0.0);
+/// ```
 pub fn shannon_entropy(data: &[u8]) -> f64 {
     if data.is_empty() {
         return 0.0;
@@ -47,6 +56,15 @@ pub fn shannon_entropy(data: &[u8]) -> f64 {
 /// Normalized entropy: Shannon entropy divided by max possible entropy
 /// for the number of unique characters. Range: 0.0 to 1.0.
 /// Better than raw Shannon for comparing strings of different lengths/charsets.
+/// Compute entropy normalized to the range `0.0..=1.0`.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::entropy::normalized_entropy;
+///
+/// assert_eq!(normalized_entropy(b""), 0.0);
+/// ```
 pub fn normalized_entropy(data: &[u8]) -> f64 {
     if data.is_empty() {
         return 0.0;
@@ -135,6 +153,14 @@ const SECRET_KEYWORDS: &[&str] = &[
 
 /// A high-entropy string found near a secret keyword.
 #[derive(Debug, Clone)]
+/// Entropy-based candidate match returned by fallback secret detection.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use keyhog_scanner::entropy::EntropyMatch;
+/// let _ = std::mem::size_of::<EntropyMatch>();
+/// ```
 pub struct EntropyMatch {
     /// The candidate string that exceeded the entropy threshold.
     pub value: String,
@@ -151,6 +177,15 @@ pub struct EntropyMatch {
 /// Check if a file path suggests a config/secret file (where entropy scanning is useful).
 /// Source code files have too many high-entropy strings (function names, imports, constants)
 /// for entropy to be reliable without ML.
+/// Decide whether entropy scanning should run for the given path.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::entropy::is_entropy_appropriate;
+///
+/// assert!(is_entropy_appropriate(Some(".env")));
+/// ```
 pub fn is_entropy_appropriate(path: Option<&str>) -> bool {
     let Some(path) = path else { return true }; // stdin = scan
     let lower = path.to_lowercase();
@@ -201,6 +236,16 @@ pub fn is_entropy_appropriate(path: Option<&str>) -> bool {
 
 /// Find high-entropy strings near secret keywords in text.
 /// This catches secrets that have no known pattern — the TruffleHog gap.
+/// Find secret-like tokens using entropy heuristics near likely credential context.
+///
+/// # Examples
+///
+/// ```rust
+/// use keyhog_scanner::entropy::find_entropy_secrets;
+///
+/// let matches = find_entropy_secrets("API_KEY=abcdEFGH12345678", 16, 1);
+/// assert!(!matches.is_empty());
+/// ```
 pub fn find_entropy_secrets(
     text: &str,
     min_length: usize,
