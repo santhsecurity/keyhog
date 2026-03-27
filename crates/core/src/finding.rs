@@ -35,6 +35,11 @@ use crate::Severity;
 ///
 /// assert_eq!(finding.detector_id, "demo-token");
 /// ```
+/// A raw pattern match before verification or deduplication.
+///
+/// Contains the matched credential, its detector, location, and optional
+/// entropy/confidence scores. This is the scanner's raw output before
+/// verification or deduplication.
 #[derive(Debug, Clone, Serialize)]
 pub struct RawMatch {
     /// Stable detector identifier.
