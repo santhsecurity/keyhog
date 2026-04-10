@@ -1,0 +1,77 @@
+[package]
+name = "keyhog-scanner"
+description = "High-performance secret detection engine with Hyperscan NFA, GPU pattern matching, entropy scoring, and decode-through scanning"
+version = "0.2.0"
+edition = "2024"
+authors = ["Corum Collective LLC <contact@santh.io>"]
+license = "MIT"
+repository = "https://github.com/santhsecurity/keyhog"
+keywords = ["secret-scanner", "security", "credentials", "api-keys", "git"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+
+[features]
+default = ["ml", "entropy", "decode", "multiline", "simdsieve", "simd"]
+ml = []
+entropy = []
+decode = []
+multiline = []
+gpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]  # GPU-accelerated batch MoE inference via wgpu compute shaders
+simd = ["dep:hyperscan"]  # Vectorscan/Hyperscan SIMD regex compilation (builds HS database)
+simd_scan = ["simd"]      # Enable SIMD scan path (experimental — AC+fallback is faster for <2K patterns)
+simdsieve = ["dep:simdsieve"]  # SIMD-accelerated prefilter for top 8 patterns (50 GB/s)
+
+[dependencies]
+keyhog-core = { path = "../core" }
+wgpu = { version = "24", optional = true }
+pollster = { version = "0.4", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+aho-corasick = "1"
+warpstate = "0.1"
+regex = "1"
+base64 = "0.22"
+unicode-normalization = "0.1"
+thiserror = "2"
+tracing = "0.1"
+sha2 = "0.10"
+memchr = "2.8.0"
+rayon = "1"
+lru = "0.12"
+lazy_static = "1.4"
+hyperscan = { version = "0.3", optional = true }
+
+simdsieve = { version = "0.1", optional = true }
+parking_lot = "0.12.5"
+hex = "0.4.3"
+serde_json = "1"
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["rt", "time"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+io-uring = "0.7"
+
+# Optional: Vectorscan SIMD backend
+
+[dev-dependencies]
+criterion = "0.5"
+keyhog-verifier = { path = "../verifier" }
+proptest = "1.11.0"
+tokio = { version = "1", features = ["full"] }
+tempfile = "3"
+toml = "0.8"
+
+#[[bench]]
+#name = "throughput"
+#harness = false
+
+#[[bench]]
+#name = "edge_cases"
+#harness = false
+
+#[[bench]]
+#name = "alphabet"
+#harness = false
+
+#[[bench]]
+#name = "entropy"
+#harness = false

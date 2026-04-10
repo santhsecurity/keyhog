@@ -1,0 +1,27 @@
+# Docs: https://shopify.dev/docs/api/storefront
+# Format: shpss_ prefix followed by 32 hexadecimal characters
+# Verify: POST to {{shop}}.myshopify.com/api/2024-01/graphql.json with X-Shopify-Storefront-Access-Token header
+# Prefix: shpss_
+
+[detector]
+id = "shopify-storefront-api-token"
+name = "Shopify Storefront API Token"
+service = "shopify"
+severity = "critical"
+keywords = ["shpss_", "storefront", "SHOPIFY_STOREFRONT"]
+
+[[detector.patterns]]
+regex = 'shpss_[a-f0-9]{32}'
+description = "Shopify Storefront API access token (shpss_ prefix)"
+
+[detector.verify]
+method = "POST"
+url = "https://{{shop}}.myshopify.com/api/2024-01/graphql.json"
+
+[detector.verify.auth]
+type = "header"
+name = "X-Shopify-Storefront-Access-Token"
+template = "{{match}}"
+
+[detector.verify.success]
+status = 200

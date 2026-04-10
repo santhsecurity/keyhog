@@ -1,0 +1,21 @@
+# Docs: https://cloud.google.com/functions/docs/securing/authenticating
+# Format: API key passed as query parameter (?key=AIza...)
+# Verify: no public verification endpoint (requires specific function endpoint)
+# Prefix: AIza (Google API key prefix)
+
+[detector]
+id = "google-cloud-functions-api-key"
+name = "Google Cloud Functions API Key"
+service = "google-cloud"
+severity = "critical"
+keywords = ["cloudfunctions", "googleapis", "AIza"]
+
+[[detector.patterns]]
+regex = "https://[a-z0-9-]+-[a-z0-9]+-uc\\.a\\.run\\.app.*[?&]key=(AIza[0-9A-Za-z_-]{35})"
+description = "Google Cloud Functions URL with API key in query string"
+group = 1
+
+[[detector.patterns]]
+regex = "(?:CLOUDFUNCTIONS|cloudfunctions|CLOUD_FUNCTIONS|cloud_functions)[_\\-\\s]*(?:API|api)?[_\\-\\s]*(?:KEY|key)[=:\\s\"'\\']+(AIza[0-9A-Za-z_-]{35})"
+description = "Google Cloud Functions API key with context anchor"
+group = 1

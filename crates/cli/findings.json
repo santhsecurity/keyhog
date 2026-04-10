@@ -1,0 +1,38 @@
+[
+  {
+    "detector_id": "github-classic-pat",
+    "detector_name": "GitHub Classic PAT",
+    "service": "github",
+    "severity": "critical",
+    "credential_redacted": "ghp_1234567890abcdef1234567890abcdef12345678",
+    "location": {
+      "source": "filesystem",
+      "file_path": "/tmp/.tmp7roMRN/real-secrets/github.env",
+      "line": 1,
+      "offset": 13,
+      "commit": null,
+      "author": null,
+      "date": null
+    },
+    "verification": "skipped",
+    "confidence": 0.9999998807907104
+  },
+  {
+    "detector_id": "generic-private-key",
+    "detector_name": "Private Key (PEM)",
+    "service": "crypto",
+    "severity": "critical",
+    "credential_redacted": "-----BEGIN RSA PRIVATE KEY-----",
+    "location": {
+      "source": "filesystem",
+      "file_path": "/tmp/.tmp7roMRN/real-secrets/private.pem",
+      "line": 1,
+      "offset": 12,
+      "commit": null,
+      "author": null,
+      "date": null
+    },
+    "verification": "skipped",
+    "confidence": 0.6
+  }
+]
