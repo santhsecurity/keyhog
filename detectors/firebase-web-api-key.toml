@@ -1,0 +1,15 @@
+# Docs: https://firebase.google.com/docs/projects/api-keys
+# Format: AIza followed by 35 alphanumeric, underscore, or hyphen characters
+# Verify: No direct API verification (used for client SDK configuration)
+# Prefix: AIza
+
+[detector]
+id = "firebase-web-api-key"
+name = "Firebase Web API Key"
+service = "firebase"
+severity = "high"
+keywords = ["AIza", "firebase"]
+
+[[detector.patterns]]
+regex = 'AIza[0-9A-Za-z_-]{35}'
+description = "Firebase Web API Key (starts with AIza)"

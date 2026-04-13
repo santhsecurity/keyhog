@@ -1,0 +1,25 @@
+# Docs: https://developers.google.com/youtube/registering_an_application
+# Format: AIza followed by 35 alphanumeric characters (same as Google API keys)
+# Verify: GET /youtube/v3/i18nRegions?part=snippet with key parameter
+# Prefix: AIza
+
+[detector]
+id = "youtube-data-api-key"
+name = "YouTube Data API Key"
+service = "youtube"
+severity = "high"
+keywords = ["AIza", "youtube", "YOUTUBE", "YOUTUBE_API_KEY", "googleapis.com/youtube"]
+
+[[detector.patterns]]
+regex = "AIza[0-9A-Za-z_-]{35}"
+description = "YouTube Data API Key (AIza prefix)"
+
+[[detector.patterns]]
+regex = "(?:youtube|YOUTUBE)[_\\s]?(?:api_key|API_KEY|key)[=:\\s\"'']+(AIza[0-9A-Za-z_-]{35})"
+description = "YouTube API key with context anchor"
+group = 1
+
+[detector.verify]
+method = "GET"
+url = "https://www.googleapis.com/youtube/v3/i18nRegions?part=snippet&key={credential}"
+success_codes = [200]

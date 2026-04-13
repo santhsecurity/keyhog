@@ -1,0 +1,27 @@
+# Docs: https://developers.google.com/maps/documentation/javascript/get-api-key
+# Format: AIza + 35 alphanumeric characters (Base64-like)
+# Verify: GET request to Google APIs with key parameter
+# Prefix: AIza
+
+[detector]
+id = "google-api-key"
+name = "Google/YouTube API Key"
+service = "google"
+severity = "critical"
+keywords = ["AIza"]
+
+[[detector.patterns]]
+regex = 'AIza[0-9A-Za-z_-]{35}'
+description = "Google API Key (YouTube, Maps, etc.)"
+
+[detector.verify]
+method = "GET"
+url = "https://www.googleapis.com/oauth2/v1/tokeninfo?access_token={{match}}"
+
+[detector.verify.auth]
+type = "query"
+param = "key"
+field = "match"
+
+[detector.verify.success]
+status = 200

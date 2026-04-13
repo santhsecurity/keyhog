@@ -1,0 +1,15 @@
+# Docs: https://developers.google.com/maps/documentation/address-validation/overview
+# Format: Standard Google API key format - 39 characters, starts with AIza
+# Verify: POST /v1:validateAddress with key query parameter
+# Prefix: AIza
+
+[detector]
+id = "google-address-validation-api-key"
+name = "Google Address Validation API Key"
+service = "google"
+severity = "high"
+keywords = ["AIza", "addressvalidation.googleapis.com", "GOOGLE_ADDRESS_VALIDATION"]
+
+[[detector.patterns]]
+regex = 'AIza[0-9A-Za-z_-]{35}'
+description = "Google Address Validation API key (AIza prefix)"

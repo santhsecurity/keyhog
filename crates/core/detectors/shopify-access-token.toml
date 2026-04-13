@@ -1,0 +1,35 @@
+# Docs: https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens
+# Format: Prefix shpca_, shpat_, or shpss_ followed by 32 hex chars
+# Verify: API call to {{shop}}.myshopify.com/admin/api/{version}/shop.json
+# Prefix: shpca_, shpat_, shpss_
+
+[detector]
+id = "shopify-access-token"
+name = "Shopify Access Token"
+service = "shopify"
+severity = "critical"
+keywords = ["shpca_", "shpat_", "shpss_", "shopify"]
+
+[[detector.patterns]]
+regex = 'shpca_[a-f0-9]{32}'
+description = "Shopify custom app access token"
+
+[[detector.patterns]]
+regex = 'shpat_[a-f0-9]{32}'
+description = "Shopify admin API access token"
+
+[[detector.patterns]]
+regex = 'shpss_[a-f0-9]{32}'
+description = "Shopify storefront access token"
+
+[detector.verify]
+method = "GET"
+url = "https://{{shop}}.myshopify.com/admin/api/2024-01/shop.json"
+
+[detector.verify.auth]
+type = "header"
+name = "X-Shopify-Access-Token"
+template = "{{match}}"
+
+[detector.verify.success]
+status = 200
