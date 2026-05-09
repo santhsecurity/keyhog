@@ -44,3 +44,19 @@ tailwind/
 react/
 benchmark-harness/
 .work-linux.bundle
+
+# AI-tool artefacts (never check these into a public repo —
+# they are operator-private and may leak workflow context)
+CLAUDE.md
+AGENTS.md
+agents.md
+AGENT.md
+GEMINI.md
+.claude/
+.agents/
+.codex/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.aider*
